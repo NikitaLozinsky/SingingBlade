@@ -1,0 +1,109 @@
+{
+  "LocalizedStrings": [
+    {
+      "Key": "SingingBlade.Item.Name",
+      "SimpleName": "SingingBlade.Item.Name",
+      "ProcessTemplates": false,
+      "ruRU": "Поющий клинок",
+      "enGB": "Singing Blade"
+    },
+    {
+      "Key": "SingingBlade.Item.Description",
+      "SimpleName": "SingingBlade.Item.Description",
+      "ProcessTemplates": false,
+      "ruRU": "Скимитар, выкованный для магуса, чья воля неотделима от заклинания. При критическом попадании клинок пытается подхватить боевую песнь (проверка Убеждения, сложность 40) — и, если голос не подводит, союзники поблизости на миг чувствуют прилив уверенности, а по врагам в той же зоне проходит слабый отголосок стихии, которой сейчас насыщено оружие через Мистический резерв. Если магус в этот раунд уже сплетал заклинание с ударом клинка через Боевое заклинание или Заклинательный удар, песнь звучит немного громче.",
+      "enGB": "A scimitar forged for a magus whose will is inseparable from the spell. On a critical hit the blade tries to take up a battle song of its own (Persuasion check, DC 40) — and if the voice holds, nearby allies feel a brief surge of confidence, while enemies in the same area take a faint echo of whatever element currently charges the weapon through the Arcane Pool. If the magus wove a spell into this very strike via Spell Combat or Spellstrike this round, the song rings a little louder."
+    },
+    {
+      "Key": "SingingBlade.Ability.Name",
+      "SimpleName": "SingingBlade.Ability.Name",
+      "ProcessTemplates": false,
+      "ruRU": "Отголосок клинка",
+      "enGB": "Blade's Echo"
+    },
+    {
+      "Key": "SingingBlade.Ability.Description",
+      "SimpleName": "SingingBlade.Ability.Description",
+      "ProcessTemplates": false,
+      "ruRU": "Срабатывает при критическом ударе Поющим клинком, если проверка Убеждения (сложность 40) успешна. Союзники поблизости получают краткий боевой бонус к атаке и урону (и стойкость духа против чар и страха), а враги в той же зоне получают небольшой урон стихии, которой сейчас наделён клинок через Мистический резерв.",
+      "enGB": "Triggers on a critical hit with the Singing Blade, provided a Persuasion check (DC 40) succeeds. Nearby allies gain a brief bonus to attack and damage rolls (and a bonus on saves against charm and fear effects), while enemies in the same area take a small amount of damage of whatever element currently enchants the blade through the Arcane Pool."
+    },
+    {
+      "Key": "SingingBlade.SongBuff.Name",
+      "SimpleName": "SingingBlade.SongBuff.Name",
+      "ProcessTemplates": false,
+      "ruRU": "Песнь клинка",
+      "enGB": "Blade's Song"
+    },
+    {
+      "Key": "SingingBlade.SongBuff.Description",
+      "SimpleName": "SingingBlade.SongBuff.Description",
+      "ProcessTemplates": false,
+      "ruRU": "Бонус мастерства к атаке и урону, а также бонус боевого духа к спасброскам против чар и страха. Сила зависит от уровня магуса.",
+      "enGB": "A competence bonus to attack and damage rolls, plus a morale bonus on saves against charm and fear effects. Scales with magus level."
+    },
+    {
+      "Key": "SingingBlade.SongBuffEmpowered.Name",
+      "SimpleName": "SingingBlade.SongBuffEmpowered.Name",
+      "ProcessTemplates": false,
+      "ruRU": "Песнь клинка (усиленная)",
+      "enGB": "Blade's Song (Empowered)"
+    },
+    {
+      "Key": "SingingBlade.SongBuffEmpowered.Description",
+      "SimpleName": "SingingBlade.SongBuffEmpowered.Description",
+      "ProcessTemplates": false,
+      "ruRU": "Тот же эффект, что и обычная Песнь клинка, но звучит громче — магус только что вплёл в удар боевое заклинание через Боевое заклинание или Заклинательный удар.",
+      "enGB": "The same effect as Blade's Song, but louder — the magus just wove a spell into this strike via Spell Combat or Spellstrike."
+    },
+    {
+      "Key": "SingingBlade.SungThisRoundFlag.Name",
+      "SimpleName": "SingingBlade.SungThisRoundFlag.Name",
+      "ProcessTemplates": false,
+      "ruRU": "Клинок переводит дыхание",
+      "enGB": "Blade Catching Its Breath"
+    },
+    {
+      "Key": "SingingBlade.SungThisRoundFlag.Description",
+      "SimpleName": "SingingBlade.SungThisRoundFlag.Description",
+      "ProcessTemplates": false,
+      "ruRU": "Клинок уже спел в этом раунде — новая песня не зазвучит раньше следующего.",
+      "enGB": "The blade has already sung this round — it will not sing again before the next one."
+    },
+    {
+      "Key": "SingingBlade.EchoAreaBuff.Name",
+      "SimpleName": "SingingBlade.EchoAreaBuff.Name",
+      "ProcessTemplates": false,
+      "ruRU": "Отголосок клинка (зона)",
+      "enGB": "Blade's Echo (Zone)"
+    },
+    {
+      "Key": "SingingBlade.EchoAreaBuff.Description",
+      "SimpleName": "SingingBlade.EchoAreaBuff.Description",
+      "ProcessTemplates": false,
+      "ruRU": "Пока действует, в начале каждого следующего раунда враги поблизости получают небольшой урон стихии, которой сейчас наделён клинок через Мистический резерв. Продлевается новой успешной песней.",
+      "enGB": "While active, at the start of each following round nearby enemies take a small amount of damage of whatever element currently enchants the blade through the Arcane Pool. Extended by another successful song."
+    },
+    {
+      "Key": "SingingBlade.Enchantment.Name",
+      "SimpleName": "SingingBlade.Enchantment.Name",
+      "ProcessTemplates": false,
+      "ruRU": "Отзвук песни",
+      "enGB": "Echo of Song"
+    },
+    {
+      "Key": "SingingBlade.Enchantment.Description",
+      "SimpleName": "SingingBlade.Enchantment.Description",
+      "ProcessTemplates": false,
+      "ruRU": "Всякий раз, когда держащий этот скимитар подтверждает критический удар, он совершает проверку Убеждения (сложность 40). При успехе клинок сам подхватывает короткую боевую песнь, будто в руке зазвучала невидимая струна.",
+      "enGB": "Whenever the wielder of this scimitar confirms a critical hit, they make a Persuasion check (DC 40). On a success, the blade takes up a brief battle song of its own, as though an unseen string had begun to hum in the wielder's hand."
+    },
+    {
+      "Key": "SingingBlade.Item.FlavorText",
+      "SimpleName": "SingingBlade.Item.FlavorText",
+      "ProcessTemplates": false,
+      "ruRU": "Говорят, что выковал его мастер, который не смог выбрать между кузней и хором — и однажды перестал выбирать.\n\nЕго звали Хальвор Тихострун, хотя тихим он не был ни дня в своей жизни. До Мирового Разлома он был бродячим кузнецом-бардом, из тех, что куют клинок под одну песню и точат под другую, а третью приберегают для заказчика, чтобы тот запомнил цену не только монетой. Когда с севера потянулась вонь Бездны и крестоносцы потоком хлынули к Дрездену, Хальвор пришёл вместе с ними — не с мечом, а с молотом и лютней, притороченными к одному седлу.\n\nОн говорил, что сталь и голос — родня: оба рождаются из напряжения, оба ломаются, если тянуть не в такт. Три зимы он выковывал этот клинок между боями, в перерывах между звоном металла напевая ему то колыбельные, то боевые гимны, то просто мотивы без слов — лишь бы клинок слушал. К третьей весне металл, по его словам, начал слушать в ответ.\n\nПервый раз клинок запел сам — не от руки Хальвора, а в руке молодого мага-полукровки, что дрался с демоном у сгоревших ворот. Тот маг вложил в удар не только сталь, но и заклятие — и в тот миг, когда лезвие вошло точно и глубоко, по рядам крестоносцев прокатился отзвук боевого гимна, будто сама сталь запомнила, чему её учили три зимы подряд. Демон отшатнулся не от боли — от звука.\n\nХальвор Тихострун не дожил до конца Крестового похода; где и как он пал, ни одна хроника не сохранила. Но клинок его пережил кузнеца — и с тех пор ищет нового хозяина, чья воля неотделима от заклинания, чтобы вновь, редко и не по заказу, подхватить недопетую песню.",
+      "enGB": "They say it was forged by a smith who could never choose between the forge and the choir — and one day simply stopped choosing.\n\nHis name was Halvor Quietstring, though he was never quiet a day in his life. Before the Worldwound tore the sky open, he was a wandering smith-bard, the kind who tempers a blade to one song and sharpens it to another, saving a third for the buyer so they'd remember the cost was never only coin. When the reek of the Abyss began drifting south and crusaders streamed toward Drezen, Halvor came with them — not with a sword, but with a hammer and a lute strapped to the same saddle.\n\nHe used to say steel and voice were kin: both born of tension, both prone to snapping if pulled out of time. For three winters he forged this blade between battles, humming to it in the lulls between hammer-strikes — lullabies, war-hymns, sometimes just wordless tunes, so long as the blade was listening. By the third spring, he claimed, the metal had begun to listen back.\n\nThe blade first sang on its own not in Halvor's hand, but in the grip of a young half-blood mage fighting a demon by the burned gate. That mage poured not only steel but a spell into the strike — and in the instant the edge bit true and deep, an echo of a war-hymn rolled down the crusader lines, as if the steel itself remembered three winters of lessons. The demon recoiled not from the wound, but from the sound.\n\nHalvor Quietstring did not live to see the Crusade's end; no chronicle records where or how he fell. But his blade outlived the smith — and has sought a new owner ever since, one whose will is inseparable from the spell, to take up, rarely and never on command, the song he left unfinished."
+    }
+  ]
+}

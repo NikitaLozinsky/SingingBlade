@@ -1,0 +1,22 @@
+# Build and output directories
+bin/
+obj/
+
+# IDE and Editor files
+.idea/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Claude local docs and settings
+#CLAUDE.md
+#.claude/
+
+# System and OS files
+[Th]umbs.db
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store

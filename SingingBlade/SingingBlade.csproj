@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net472</TargetFramework>
+        <AssemblyName>SingingBlade</AssemblyName>
+        <RootNamespace>SingingBlade</RootNamespace>
+        <LangVersion>latest</LangVersion>
+        <Nullable>disable</Nullable>
+        <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+        <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+
+        <ModName>SingingBlade</ModName>
+        <ManagedPath>$(WOTR_PATH)\Wrath_Data\Managed</ManagedPath>
+        <ModDeployPath>$(WOTR_PATH)\Mods\$(ModName)</ModDeployPath>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Lib.Harmony" Version="2.3.6" />
+        <PackageReference Include="UnityModManager" Version="0.32.4" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Reference Include="Assembly-CSharp">
+            <HintPath>$(ManagedPath)\Assembly-CSharp.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Assembly-CSharp-firstpass">
+            <HintPath>$(ManagedPath)\Assembly-CSharp-firstpass.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="UnityEngine">
+            <HintPath>$(ManagedPath)\UnityEngine.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="UnityEngine.CoreModule">
+            <HintPath>$(ManagedPath)\UnityEngine.CoreModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="UnityEngine.IMGUIModule">
+            <HintPath>$(ManagedPath)\UnityEngine.IMGUIModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Owlcat.Runtime.Core">
+            <HintPath>$(ManagedPath)\Owlcat.Runtime.Core.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Owlcat.Runtime.Validation">
+            <HintPath>$(ManagedPath)\Owlcat.Runtime.Validation.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+    </ItemGroup>
+
+    <Target Name="DeployMod" AfterTargets="Build">
+        <MakeDir Directories="$(ModDeployPath)" Condition="!Exists('$(ModDeployPath)')" />
+        <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ModDeployPath)" />
+        <Copy SourceFiles="$(ProjectDir)Info.json" DestinationFolder="$(ModDeployPath)" />
+        <Copy SourceFiles="$(ProjectDir)Localization.json" DestinationFolder="$(ModDeployPath)" />
+    </Target>
+
+</Project>
