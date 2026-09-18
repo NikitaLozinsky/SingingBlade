@@ -11,18 +11,14 @@ using Kingmaker.Designers.EventConditionActionSystem.Actions;
 using Kingmaker.Designers.Mechanics.Facts;
 using Kingmaker.ElementsSystem;
 using Kingmaker.Enums;
-using Kingmaker.Enums.Damage;
 using Kingmaker.EntitySystem.Stats;
 using Kingmaker.Items;
 using Kingmaker.Localization;
 using Kingmaker.ResourceLinks;
 using Kingmaker.RuleSystem;
-using Kingmaker.RuleSystem.Rules.Damage;
 using Kingmaker.UnitLogic.Abilities.Blueprints;
 using Kingmaker.UnitLogic.Abilities.Components;
-using Kingmaker.UnitLogic.Abilities.Components.AreaEffects;
 using Kingmaker.UnitLogic.Buffs.Blueprints;
-using Kingmaker.UnitLogic.Buffs.Components;
 using Kingmaker.UnitLogic.FactLogic;
 using Kingmaker.UnitLogic.Mechanics;
 using Kingmaker.UnitLogic.Mechanics.Actions;
@@ -37,32 +33,39 @@ namespace SingingBlade
     // регистрирует их в ResourcesLibrary.BlueprintsCache. Структура скопирована
     // с уникального оружия "Faith Bearer" (Item -> Enchantment с крит-триггером
     // -> Ability с AoE-эффектом), но:
-    //  - без skill-check гейта на триггере (эффект срабатывает автоматически на крите);
+    //  - при крите не срабатывает автоматически, а требует успешной проверки
+    //    Подвижности (DC 40, не больше раза за раунд);
     //  - вместо лечения союзников — форк "Песни отваги" барда, масштабируемый по
-    //    уровню Магуса (и класса, и архетипа Eldritch Scion — см. ниже);
-    //  - плюс урон по врагам в той же зоне стихией текущего зачарования Arcane Pool.
+    //    уровню Магуса (и класса, и архетипа Eldritch Scion — см. ниже).
+    //
+    // Урон по врагам (стихийное эхо от Arcane Pool) — БЫЛ в ранней версии мода,
+    // УБРАН по прямой просьбе пользователя: он задевал союзных, но неподконтрольных
+    // игроку NPC (ContextConditionIsAlly не распознавал их как "своих"), плюс с ним
+    // была связана потиковая AreaEffect-зона (см. GUID EchoAreaGuid/EchoAreaBuffGuid
+    // в Guids.cs — больше не используются, оставлены закомментированными, чтобы не
+    // переиспользовать случайно), которая крашилась на каждый тик игры из-за пустых
+    // ActionList-полей в AbilityAreaEffectRunAction и мешала баффу союзникам корректно
+    // сниматься. См. историю в CLAUDE.md, если понадобится восстановить похожую механику —
+    // в следующий раз стоит сразу учесть оба урока.
     public static class SingingBladeBlueprints
     {
-        // Радиус эффекта (в футах) — чуть больше, чем у Faith Bearer (15), т.к. эффект
-        // двойной (баф союзникам + урон врагам), а не только лечение.
+        // Радиус AoE вокруг атакующего, в котором ищутся союзники для песни.
         private const float EchoRadiusFeet = 30f;
 
         public static void Create()
         {
             var songBuff = BuildSongBuff(Guids.SongBuffGuid, "SingingBladeSongBuff", empowered: false);
             var songBuffEmpowered = BuildSongBuff(Guids.SongBuffEmpoweredGuid, "SingingBladeSongBuffEmpowered", empowered: true);
+            var songAureole = BuildSongAureole();
             var sungThisRoundFlag = BuildSungThisRoundFlag();
-            var echoArea = BuildEchoArea();
-            var echoAreaBuff = BuildEchoAreaBuff();
             var ability = BuildAbility();
             var enchantment = BuildEnchantment();
             var item = BuildItem();
 
             Register(songBuff);
             Register(songBuffEmpowered);
+            Register(songAureole);
             Register(sungThisRoundFlag);
-            Register(echoArea);
-            Register(echoAreaBuff);
             Register(ability);
             Register(enchantment);
             Register(item);
@@ -158,32 +161,38 @@ namespace SingingBlade
             Reflect.Set(castAbility, "m_Spell", Reflect.Ref<BlueprintAbilityReference>(Guids.AbilityGuid));
 
             // Отмечаем "спели в этом раунде" ТОЛЬКО при реальном успехе песни (не на
-            // каждой попытке) — неудачная проверка Убеждения не тратит "лимит раунда",
+            // каждой попытке) — неудачная проверка Подвижности не тратит "лимит раунда",
             // так что следующий крит в этой же серии ударов ещё может спеть успешно.
             var markSungThisRound = ApplyBuff(Guids.SungThisRoundFlagGuid, toCaster: true);
 
-            // Визуальная ауреоль/кольцо выступления — РАЗОВЫЙ спавн Fx на кастере,
-            // а не AddAreaEffect (тот вариант уже приводил к перманентному баффу и
-            // дублям в панели — см. историю в CLAUDE.md). FxOnStart на самом SongBuff
-            // даёт только всплеск на союзнике-получателе, а не кольцо вокруг исполнителя,
-            // поэтому кольцо добавляем отдельно, здесь.
-            var singFx = new ContextActionSpawnFx { PrefabLink = new PrefabLink { AssetId = Guids.InspireCourageAreaFx } };
+            // Кольцо-ауреоль — на самого исполнителя, ровно один раз за успешную песню.
+            // Именно здесь, а не в BuildAbility: AbilityEffectRunAction выполняется ОТДЕЛЬНО
+            // для каждой цели AoE, и наложение "на кастера" оттуда сработало бы по разу на
+            // каждого союзника в радиусе. Success-ветка проверки навыка выполняется один раз.
+            var spawnAureole = ApplyBuff(Guids.SongAureoleGuid, toCaster: true);
 
-            // Зона эхо-урона по врагам — накладываем на кастера при каждой успешной песне.
-            // StackingType.Prolong у EchoAreaBuff (см. BuildEchoAreaBuff) означает, что
-            // повторный успех ПРОДЛЕВАЕТ уже активную зону, а не создаёт вторую поверх неё.
-            var extendEchoArea = ApplyBuff(Guids.EchoAreaBuffGuid, toCaster: true);
+            // Кольцо/ауреоль выступления раньше спавнилось здесь отдельным разовым
+            // ContextActionSpawnFx(InspireCourageAreaFx) — но это Fx самой
+            // InspireCourageArea, рассчитанный на ПОСТОЯННО включённую area-effect зону
+            // с собственным контроллером жизненного цикла (спавн на активации/уничтожение
+            // на ForceEnd()). Спавн "в лоб", без владеющего баффа, никем не уничтожается —
+            // эффект оставался навсегда (см. историю в CLAUDE.md). Теперь этот же Fx
+            // назначен прямо в FxOnStart у SongBuff/SongBuffEmpowered (см. BuildSongBuff) —
+            // у PrefabLink там уже есть подтверждённо рабочая очистка вместе со снятием баффа
+            // (Buff.TrySpawnParticleEffect/ClearParticleEffect), отдельный экшен тут не нужен.
 
-            // Проверка Убеждения (DC 40) — песнь звучит не на каждом крите, а только при
-            // успехе. CheckForCaster=true: триггер уже выполняется в контексте атакующего
-            // (см. ActionsOnInitiator ниже), поэтому проверяем именно его навык, а не цели.
+            // Проверка Подвижности (DC 40) — песнь звучит не на каждом крите, а только при
+            // успехе. Навык именно Подвижность, а не Убеждение: песнь рождается не из голоса,
+            // а из танца с клинком и поющего рассечённого воздуха (см. описания в
+            // Localization.json). CheckForCaster=true: триггер уже выполняется в контексте
+            // атакующего (см. ActionsOnInitiator ниже), проверяем его навык, а не цели.
             var singChance = new ContextActionSkillCheck
             {
-                Stat = StatType.SkillPersuasion,
+                Stat = StatType.SkillMobility,
                 CheckForCaster = true,
                 UseCustomDC = true,
                 CustomDC = 40,
-                Success = new ActionList { Actions = new GameAction[] { castAbility, markSungThisRound, singFx, extendEchoArea } },
+                Success = new ActionList { Actions = new GameAction[] { castAbility, markSungThisRound, spawnAureole } },
                 Failure = new ActionList()
             };
 
@@ -262,10 +271,8 @@ namespace SingingBlade
             Reflect.Set(ability, "m_DescriptionShort", new LocalizedString());
             Reflect.Set(ability, "m_Icon", FactIcon(Guids.InspireCourageToggleAbility));
 
-            // Враги в способности больше не обрабатываются — эхо-урон переехал в
-            // EchoAreaBuff/EchoArea (см. BuildEchoAreaBuff/BuildEchoArea): бьёт не мгновенно
-            // в момент крита, а со следующего раунда, пока зона активна. Поэтому таргетимся
-            // сразу только на союзников.
+            // Только союзники — урона по врагам больше нет (убран по просьбе пользователя,
+            // см. комментарий в шапке файла).
             var targetsAround = new AbilityTargetsAround();
             Reflect.Set(targetsAround, "m_Radius", new Feet(EchoRadiusFeet));
             Reflect.Set(targetsAround, "m_TargetType", TargetType.Ally);
@@ -280,11 +287,11 @@ namespace SingingBlade
             };
 
             // Сначала снимаем "другой" вариант песни, потом накладываем нужный — SongBuff
-            // и SongBuffEmpowered это РАЗНЫЕ блюпринты, StackingType.Replace сама по себе
-            // замещает только одинаковые блюпринты. Без явного взаимного удаления на цели
-            // могли одновременно висеть оба (например, если в одном раунде спели без
-            // спелл-комбата, а в следующем — с ним) — внешне выглядит как "дублирующиеся"
-            // иконки песни в панели баффов, т.к. у обоих один и тот же одолженный значок.
+            // и SongBuffEmpowered это РАЗНЫЕ блюпринты, а StackingType (хоть Replace, хоть
+            // нынешний Prolong) работает только в пределах ОДНОГО блюпринта. Без явного
+            // взаимного удаления на цели могли одновременно висеть оба (например, если в
+            // одном раунде спели без спелл-комбата, а в следующем — с ним) — внешне выглядит
+            // как "дублирующиеся" иконки песни, т.к. значок у обоих один и тот же.
             var allyBranch = new Conditional
             {
                 Comment = "Спелл-комбат/спеллстрайк в этом раунде -> усиленная песнь",
@@ -303,130 +310,6 @@ namespace SingingBlade
             return ability;
         }
 
-        // Небольшой урон стихией текущего зачарования Arcane Pool. Формула 1d4 + (уровень Магуса / 2) —
-        // это заметно меньше, чем урон самих заклинаний Магуса (обычно несколько кубиков высокого номинала
-        // плюс модификатор характеристики), поэтому это именно "отголосок", а не замена боевого урона.
-        // Определяем активное зачарование через ContextConditionCasterHasFact на служебный Buff, который
-        // Arcane Pool вешает на кастера при выборе стихии (AddBondProperty) — чистое блюпринт-решение,
-        // без Harmony-патчей: тот же механизм, которым игра сама отслеживает Spell Combat/Spellstrike.
-        private static GameAction ElementalEcho(DamageEnergyType energy, params string[] buffGuids)
-        {
-            var conditions = new Condition[buffGuids.Length];
-            for (var i = 0; i < buffGuids.Length; i++)
-            {
-                conditions[i] = CasterHasFact(buffGuids[i]);
-            }
-
-            var deal = new ContextActionDealDamage
-            {
-                DamageType = new DamageTypeDescription { Type = DamageType.Energy, Energy = energy },
-                Value = new ContextDiceValue
-                {
-                    DiceType = DiceType.D4,
-                    DiceCountValue = 1,
-                    BonusValue = new ContextValue { ValueType = ContextValueType.Rank, ValueRank = AbilityRankType.DamageBonus }
-                },
-                IgnoreCritical = true
-            };
-
-            return new Conditional
-            {
-                ConditionsChecker = new ConditionsChecker { Operation = Operation.Or, Conditions = conditions },
-                IfTrue = new ActionList { Actions = new GameAction[] { deal } },
-                IfFalse = new ActionList()
-            };
-        }
-
-        // ----------------------------------------------------------------
-        // Зона "Отголоска" — потиковый эхо-урон по врагам со следующего раунда
-        // ----------------------------------------------------------------
-
-        // BlueprintAbilityAreaEffect: раз в раунд (Round-действие, не сразу при спавне)
-        // бьёт врагов внутри радиуса стихией текущего зачарования Arcane Pool — то есть
-        // ПЕРВЫЙ тик приходится на следующий раунд после успешной песни, а не на сам крит.
-        // m_TargetType оставлен на дефолте (Any) — фильтрация "враг/не враг" сделана явно
-        // внутри Round-действия через ContextConditionIsAlly{Not=true}, как и у ElementalEcho.
-        private static BlueprintAbilityAreaEffect BuildEchoArea()
-        {
-            var area = new BlueprintAbilityAreaEffect
-            {
-                AffectEnemies = true,
-                AggroEnemies = true,
-                AffectDead = false,
-                IgnoreSleepingUnits = false,
-                Shape = AreaEffectShape.Cylinder,
-                Size = new Feet(EchoRadiusFeet),
-                CanBeUsedInTacticalCombat = false
-            };
-            area.AssetGuid = BlueprintGuid.Parse(Guids.EchoAreaGuid);
-            area.name = "SingingBladeEchoArea";
-
-            var enemyOnly = new Conditional
-            {
-                Comment = "Только враги получают потиковый эхо-урон",
-                ConditionsChecker = new ConditionsChecker
-                {
-                    Operation = Operation.And,
-                    Conditions = new Condition[] { new ContextConditionIsAlly { Not = true } }
-                },
-                IfTrue = new ActionList
-                {
-                    Actions = new GameAction[]
-                    {
-                        ElementalEcho(DamageEnergyType.Fire, Guids.ArcaneFlamingBuff, Guids.ArcaneFlamingBurstBuff),
-                        ElementalEcho(DamageEnergyType.Cold, Guids.ArcaneFrostBuff, Guids.ArcaneIcyBurstBuff),
-                        ElementalEcho(DamageEnergyType.Electricity, Guids.ArcaneShockBuff, Guids.ArcaneShockingBurstBuff),
-                        ElementalEcho(DamageEnergyType.Holy, Guids.ArcaneHolyBuff, Guids.ArcaneAxiomaticBuff),
-                        ElementalEcho(DamageEnergyType.Unholy, Guids.ArcaneUnholyBuff, Guids.ArcaneAnarchicBuff)
-                    }
-                },
-                IfFalse = new ActionList()
-            };
-
-            var runAction = new AbilityAreaEffectRunAction
-            {
-                Round = new ActionList { Actions = new GameAction[] { enemyOnly } }
-            };
-
-            area.ComponentsArray = new BlueprintComponent[] { runAction };
-
-            return area;
-        }
-
-        // BlueprintBuff, который держит зону живой на кастере. Stacking=Prolong — ключевое:
-        // повторная успешная песня ПРОДЛЕВАЕТ существующую зону (максимум из старого и нового
-        // времени окончания), а не создаёт поверх неё вторую — иначе враги получали бы эхо
-        // от нескольких наложившихся зон сразу. ContextRankConfig обязателен здесь же (а не
-        // только на способности) — Round-действия зоны выполняются в MechanicsContext ЭТОГО
-        // баффа, а не исходной способности, так что Rank для ElementalEcho должен быть виден
-        // именно тут.
-        private static BlueprintBuff BuildEchoAreaBuff()
-        {
-            var buff = new BlueprintBuff
-            {
-                Stacking = StackingType.Prolong,
-                Frequency = DurationRate.Rounds
-            };
-            buff.AssetGuid = BlueprintGuid.Parse(Guids.EchoAreaBuffGuid);
-            buff.name = "SingingBladeEchoAreaBuff";
-
-            var addArea = new AddAreaEffect();
-            Reflect.Set(addArea, "m_AreaEffect", Reflect.Ref<BlueprintAbilityAreaEffectReference>(Guids.EchoAreaGuid));
-
-            buff.ComponentsArray = new BlueprintComponent[]
-            {
-                MagusLevelRank(AbilityRankType.DamageBonus, ContextRankProgression.Div2, startLevel: 0, stepLevel: 0),
-                addArea
-            };
-
-            Reflect.Set(buff, "m_DisplayName", SingingBladeLocalization.CreateString(L.EchoAreaBuffName));
-            Reflect.Set(buff, "m_Description", SingingBladeLocalization.CreateString(L.EchoAreaBuffDescription));
-            Reflect.Set(buff, "m_DescriptionShort", new LocalizedString());
-            Reflect.Set(buff, "m_Icon", FactIcon(Guids.InspireCourageToggleAbility));
-
-            return buff;
-        }
-
         // ----------------------------------------------------------------
         // Бафф союзникам ("Песнь клинка") — форк Inspire Courage под Магуса
         // ----------------------------------------------------------------
@@ -435,7 +318,15 @@ namespace SingingBlade
         {
             var buff = new BlueprintBuff
             {
-                Stacking = StackingType.Replace,
+                // Prolong, а не Replace: при новом успешном крите песня ПРОДЛЕВАЕТСЯ —
+                // движок оставляет тот же самый экземпляр Buff и просто двигает EndTime
+                // вперёд (см. BuffCollection.PrepareFactForAttach, case StackingType.Prolong:
+                // SetEndTime только если новый конец позже старого, длительность не копится).
+                // При Replace старый бафф снимался и накладывался новый — то есть каждый раунд
+                // это был отдельный цикл "снять/наложить": FxOnStart проигрывался заново
+                // (песня визуально "начиналась с нуля", а не продолжалась) и иконка в панели
+                // успевала мигнуть. Prolong убирает эту рваность.
+                Stacking = StackingType.Prolong,
                 Frequency = DurationRate.Rounds
             };
             buff.AssetGuid = BlueprintGuid.Parse(guid);
@@ -473,20 +364,73 @@ namespace SingingBlade
             Reflect.Set(buff, "m_Description", SingingBladeLocalization.CreateString(empowered ? L.SongBuffEmpoweredDescription : L.SongBuffDescription));
             Reflect.Set(buff, "m_DescriptionShort", new LocalizedString());
             Reflect.Set(buff, "m_Icon", FactIcon(Guids.InspireCourageToggleAbility));
-            // Визуальная вспышка при активации — тот же FX, что у настоящей Inspire Courage,
-            // но напрямую на нашем баффе (публичное поле, без реального InspireCourageBuff
-            // и его AreaEffect-хвоста — см. комментарий у Guids.InspireCourageBuffFx).
+            // Скромная вспышка на самом получателе песни. Кольцо-ауреоль сюда вешать НЕЛЬЗЯ:
+            // FxOnStart спавнится на владельце баффа (Buff.TrySpawnParticleEffect ->
+            // FxHelper.SpawnFxOnUnit(prefab, Owner.Unit.View)), а этот бафф получает каждый
+            // союзник в радиусе — при кучном строе кольца накладывались друг на друга в
+            // "плотную" ауру. Кольцо теперь на отдельном SongAureole, только на исполнителе.
             buff.FxOnStart = new PrefabLink { AssetId = Guids.InspireCourageBuffFx };
+            // КРИТИЧНО (причина бага с вечными и множащимися иконками в панели баффов):
+            // Buff.OnRemove() при снятии ЛЮБОГО баффа безусловно вызывает
+            // base.Blueprint.FxOnRemove.Load() — без проверки на null. У блюпринтов,
+            // прочитанных из JSON, PrefabLink всегда создан (пусть и с пустым AssetId),
+            // а мы строим блюпринт в рантайме, и поле оставалось C#-null -> NullReferenceException.
+            // Исключение ловится и ГЛОТАЕТСЯ в EntityFactsManager.DelegateOnFactWillDetach
+            // (try/catch + лог), поэтому игра не падала — но в BuffCollection.OnFactWillDetach
+            // строка EventBus.RaiseEvent(h => h.HandleBuffDidRemoved(fact)) идёт ПОСЛЕ
+            // fact.OnRemove() и уже не выполнялась. UI (UnitBuffPartVM) не получал события
+            // снятия -> BuffVM с иконкой навсегда оставалась в панели, а каждая следующая
+            // песня добавляла ещё одну. При этом модификаторы снимались нормально (они
+            // обрабатываются в OnRemove ДО падения), отсюда и "иконка висит, а эффекта нет".
+            // Пустой PrefabLink безопасен: WeakResourceLink.Load() возвращает null при пустом
+            // AssetId, а FxHelper.SpawnFxOnUnit(null, ...) отсекается проверкой `if ((bool)prefab`.
+            buff.FxOnRemove = new PrefabLink();
+            buff.ResourceAssetIds = new string[0];
+
+            return buff;
+        }
+
+        // Чисто визуальный бафф-носитель кольца/ауреоли выступления. Механического эффекта
+        // нет вообще — нужен только затем, чтобы у Fx был владелец с нормальным жизненным
+        // циклом (спавн в Buff.TrySpawnParticleEffect, уничтожение в Buff.ClearParticleEffect),
+        // и чтобы этот владелец был РОВНО ОДИН — сам исполнитель (накладывается toCaster),
+        // а не каждый союзник в радиусе, как было, пока кольцо висело на SongBuff.
+        // Скрыт из UI: собственной иконки у него нет и в панели баффов ему делать нечего.
+        private static BlueprintBuff BuildSongAureole()
+        {
+            var buff = new BlueprintBuff
+            {
+                // Prolong — по той же причине, что и у самой песни: продлённое выступление
+                // не должно перезапускать Fx (иначе кольцо мигало бы каждый раунд).
+                Stacking = StackingType.Prolong,
+                Frequency = DurationRate.Rounds
+            };
+            buff.AssetGuid = BlueprintGuid.Parse(Guids.SongAureoleGuid);
+            buff.name = "SingingBladeSongAureole";
+            buff.ComponentsArray = new BlueprintComponent[0];
+
+            // Пустые (не null!) LocalizedString — бафф скрыт, но правило "никаких C#-null
+            // в полях блюпринта" общее: иначе движок покажет строку "<null>", если до этих
+            // полей всё-таки кто-то доберётся (инспектор, отладочный вывод).
+            Reflect.Set(buff, "m_DisplayName", new LocalizedString());
+            Reflect.Set(buff, "m_Description", new LocalizedString());
+            Reflect.Set(buff, "m_DescriptionShort", new LocalizedString());
+            Reflect.SetEnumFlag(buff, "m_Flags", 2); // BlueprintBuff.Flags.HiddenInUi
+
+            buff.FxOnStart = new PrefabLink { AssetId = Guids.InspireCourageAreaFx };
+            buff.FxOnRemove = new PrefabLink();
+            buff.ResourceAssetIds = new string[0];
 
             return buff;
         }
 
         // Служебный маркер "уже спели в этом раунде" — чистый флаг без механического
         // эффекта, 1 раунд длительности (естественно сгорает к следующему раунду).
-        // Не скрываем через m_Flags.HiddenInUi намеренно: это приватный вложенный enum
-        // в BlueprintBuff, рефлексия в него ради чисто косметического скрытия одной
-        // маленькой иконки не стоит усложнения — вместо этого дали ему осмысленные
-        // имя/описание, чтобы иконка сама объясняла себя, если игрок её заметит.
+        // Раньше был виден в панели баффов с той же одолженной иконкой, что и сама
+        // песня, — визуально выглядело как "дублирующиеся" иконки песни при повторных
+        // критах. Прячем через BlueprintBuff.m_Flags = Flags.HiddenInUi (значение 2):
+        // это приватный вложенный enum, поэтому ссылаемся на тип не по имени, а через
+        // Reflect.SetEnumFlag (берёт Type самого поля и оборачивает rawValue им же).
         private static BlueprintBuff BuildSungThisRoundFlag()
         {
             var buff = new BlueprintBuff
@@ -502,6 +446,13 @@ namespace SingingBlade
             Reflect.Set(buff, "m_Description", SingingBladeLocalization.CreateString(L.SungThisRoundFlagDescription));
             Reflect.Set(buff, "m_DescriptionShort", new LocalizedString());
             Reflect.Set(buff, "m_Icon", FactIcon(Guids.InspireCourageToggleAbility));
+            Reflect.SetEnumFlag(buff, "m_Flags", 2); // BlueprintBuff.Flags.HiddenInUi
+            // Оба PrefabLink обязаны быть НЕ null — см. подробный комментарий в BuildSongBuff.
+            // Маркер снимается каждый раунд, так что без этого он ронял Buff.OnRemove() ровно
+            // так же, как и сами баффы песни (просто без видимой иконки — он скрыт из UI).
+            buff.FxOnStart = new PrefabLink();
+            buff.FxOnRemove = new PrefabLink();
+            buff.ResourceAssetIds = new string[0];
 
             return buff;
         }

@@ -11,22 +11,22 @@
       "Key": "SingingBlade.Item.Description",
       "SimpleName": "SingingBlade.Item.Description",
       "ProcessTemplates": false,
-      "ruRU": "Скимитар, выкованный для магуса, чья воля неотделима от заклинания. При критическом попадании клинок пытается подхватить боевую песнь (проверка Убеждения, сложность 40) — и, если голос не подводит, союзники поблизости на миг чувствуют прилив уверенности, а по врагам в той же зоне проходит слабый отголосок стихии, которой сейчас насыщено оружие через Мистический резерв. Если магус в этот раунд уже сплетал заклинание с ударом клинка через Боевое заклинание или Заклинательный удар, песнь звучит немного громче.",
-      "enGB": "A scimitar forged for a magus whose will is inseparable from the spell. On a critical hit the blade tries to take up a battle song of its own (Persuasion check, DC 40) — and if the voice holds, nearby allies feel a brief surge of confidence, while enemies in the same area take a faint echo of whatever element currently charges the weapon through the Arcane Pool. If the magus wove a spell into this very strike via Spell Combat or Spellstrike this round, the song rings a little louder."
+      "ruRU": "Скимитар, выкованный для магуса, чья воля неотделима от заклинания. Точный удар обрывает фехтование и превращает его в танец: разворот, шаг, росчерк — и рассечённый воздух не успевает сомкнуться за лезвием, а звенит ему вслед. Если владелец удержит рисунок движения (проверка Подвижности, сложность 40, не чаще раза за раунд), этот звон сложится в боевую мелодию, и союзники поблизости услышат её прежде, чем поймут, откуда она. Если магус в этот раунд вплёл в удар заклинание через Боевое заклинание или Заклинательный удар, песнь звучит громче.",
+      "enGB": "A scimitar forged for a magus whose will is inseparable from the spell. A true strike cuts the fencing short and turns it into a dance: a turn, a step, a sweep — and the parted air never quite closes behind the edge, but rings after it. If the wielder holds the figure of the movement (Mobility check, DC 40, no more than once per round), that ringing gathers into a battle melody, and nearby allies hear it before they understand where it comes from. If the magus wove a spell into this strike via Spell Combat or Spellstrike this round, the song rings louder."
     },
     {
       "Key": "SingingBlade.Ability.Name",
       "SimpleName": "SingingBlade.Ability.Name",
       "ProcessTemplates": false,
-      "ruRU": "Отголосок клинка",
-      "enGB": "Blade's Echo"
+      "ruRU": "Голос клинка",
+      "enGB": "Blade's Voice"
     },
     {
       "Key": "SingingBlade.Ability.Description",
       "SimpleName": "SingingBlade.Ability.Description",
       "ProcessTemplates": false,
-      "ruRU": "Срабатывает при критическом ударе Поющим клинком, если проверка Убеждения (сложность 40) успешна. Союзники поблизости получают краткий боевой бонус к атаке и урону (и стойкость духа против чар и страха), а враги в той же зоне получают небольшой урон стихии, которой сейчас наделён клинок через Мистический резерв.",
-      "enGB": "Triggers on a critical hit with the Singing Blade, provided a Persuasion check (DC 40) succeeds. Nearby allies gain a brief bonus to attack and damage rolls (and a bonus on saves against charm and fear effects), while enemies in the same area take a small amount of damage of whatever element currently enchants the blade through the Arcane Pool."
+      "ruRU": "Срабатывает при критическом ударе Поющим клинком, если проверка Подвижности (сложность 40) успешна — не чаще раза за раунд. Клинок ведёт владельца в короткий танец, поющий воздух расходится кругом, и союзники поблизости получают боевой бонус к атаке и урону (и стойкость духа против чар и страха) на 1 раунд.",
+      "enGB": "Triggers on a critical hit with the Singing Blade, provided a Mobility check (DC 40) succeeds — no more than once per round. The blade leads its wielder through a brief dance, the singing air spreads outward in a ring, and nearby allies gain a bonus to attack and damage rolls (and a bonus on saves against charm and fear effects) for 1 round."
     },
     {
       "Key": "SingingBlade.SongBuff.Name",
@@ -39,8 +39,8 @@
       "Key": "SingingBlade.SongBuff.Description",
       "SimpleName": "SingingBlade.SongBuff.Description",
       "ProcessTemplates": false,
-      "ruRU": "Бонус мастерства к атаке и урону, а также бонус боевого духа к спасброскам против чар и страха. Сила зависит от уровня магуса.",
-      "enGB": "A competence bonus to attack and damage rolls, plus a morale bonus on saves against charm and fear effects. Scales with magus level."
+      "ruRU": "Бонус мастерства к атаке и урону, а также бонус боевого духа к спасброскам против чар и страха. Сила зависит от уровня магуса. Длится 1 раунд.",
+      "enGB": "A competence bonus to attack and damage rolls, plus a morale bonus on saves against charm and fear effects. Scales with magus level. Lasts 1 round."
     },
     {
       "Key": "SingingBlade.SongBuffEmpowered.Name",
@@ -53,8 +53,8 @@
       "Key": "SingingBlade.SongBuffEmpowered.Description",
       "SimpleName": "SingingBlade.SongBuffEmpowered.Description",
       "ProcessTemplates": false,
-      "ruRU": "Тот же эффект, что и обычная Песнь клинка, но звучит громче — магус только что вплёл в удар боевое заклинание через Боевое заклинание или Заклинательный удар.",
-      "enGB": "The same effect as Blade's Song, but louder — the magus just wove a spell into this strike via Spell Combat or Spellstrike."
+      "ruRU": "Тот же эффект, что и обычная Песнь клинка, но звучит громче — магус только что вплёл в удар боевое заклинание через Боевое заклинание или Заклинательный удар. Длится 1 раунд.",
+      "enGB": "The same effect as Blade's Song, but louder — the magus just wove a spell into this strike via Spell Combat or Spellstrike. Lasts 1 round."
     },
     {
       "Key": "SingingBlade.SungThisRoundFlag.Name",
@@ -71,20 +71,6 @@
       "enGB": "The blade has already sung this round — it will not sing again before the next one."
     },
     {
-      "Key": "SingingBlade.EchoAreaBuff.Name",
-      "SimpleName": "SingingBlade.EchoAreaBuff.Name",
-      "ProcessTemplates": false,
-      "ruRU": "Отголосок клинка (зона)",
-      "enGB": "Blade's Echo (Zone)"
-    },
-    {
-      "Key": "SingingBlade.EchoAreaBuff.Description",
-      "SimpleName": "SingingBlade.EchoAreaBuff.Description",
-      "ProcessTemplates": false,
-      "ruRU": "Пока действует, в начале каждого следующего раунда враги поблизости получают небольшой урон стихии, которой сейчас наделён клинок через Мистический резерв. Продлевается новой успешной песней.",
-      "enGB": "While active, at the start of each following round nearby enemies take a small amount of damage of whatever element currently enchants the blade through the Arcane Pool. Extended by another successful song."
-    },
-    {
       "Key": "SingingBlade.Enchantment.Name",
       "SimpleName": "SingingBlade.Enchantment.Name",
       "ProcessTemplates": false,
@@ -95,8 +81,8 @@
       "Key": "SingingBlade.Enchantment.Description",
       "SimpleName": "SingingBlade.Enchantment.Description",
       "ProcessTemplates": false,
-      "ruRU": "Всякий раз, когда держащий этот скимитар подтверждает критический удар, он совершает проверку Убеждения (сложность 40). При успехе клинок сам подхватывает короткую боевую песнь, будто в руке зазвучала невидимая струна.",
-      "enGB": "Whenever the wielder of this scimitar confirms a critical hit, they make a Persuasion check (DC 40). On a success, the blade takes up a brief battle song of its own, as though an unseen string had begun to hum in the wielder's hand."
+      "ruRU": "Всякий раз, когда держащий этот скимитар подтверждает критический удар, лезвие тянет руку дальше замаха — в поворот, в круг, в танец, — и владелец совершает проверку Подвижности (сложность 40, не чаще раза за раунд). При успехе он не разрывает этот рисунок: клинок чертит в воздухе полную фигуру, рассечённые слои воздуха трогают друг друга, как струны, и дрожь стали складывается в короткую боевую мелодию — ту самую, которой три зимы учили этот металл.",
+      "enGB": "Whenever the wielder of this scimitar confirms a critical hit, the edge pulls the hand on past the swing — into a turn, a circle, a dance — and the wielder makes a Mobility check (DC 40, no more than once per round). On a success they do not break the figure: the blade draws it whole in the air, the parted layers of air touch one another like strings, and the tremor of the steel gathers into a brief battle melody — the very one this metal was taught across three winters."
     },
     {
       "Key": "SingingBlade.Item.FlavorText",

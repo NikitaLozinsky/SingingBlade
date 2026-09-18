@@ -45,5 +45,26 @@ namespace SingingBlade
             reference.ReadGuidFromGuid(BlueprintGuid.Empty);
             return reference;
         }
+
+        // Ставит значение приватного enum-поля, когда сам тип enum'а тоже приватный
+        // вложенный класс (например BlueprintBuff.Flags) и недоступен по имени из
+        // вызывающего кода — берём Type самого поля через рефлексию и оборачиваем
+        // rawValue через Enum.ToObject вместо прямой ссылки на тип enum'а.
+        public static void SetEnumFlag(object target, string fieldName, int rawValue)
+        {
+            var type = target.GetType();
+            FieldInfo field = null;
+            while (type != null && field == null)
+            {
+                field = type.GetField(fieldName,
+                    BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+                type = type.BaseType;
+            }
+
+            if (field == null)
+                throw new MissingFieldException(target.GetType().FullName, fieldName);
+
+            field.SetValue(target, Enum.ToObject(field.FieldType, rawValue));
+        }
     }
 }
