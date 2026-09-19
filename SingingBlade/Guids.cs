@@ -13,6 +13,11 @@ namespace SingingBlade
         // потребовался ещё один отдельный BlueprintBuff, поэтому сгенерирован новый GUID.
         public const string SongBuffEmpoweredGuid = "a1c4f9e26b7d4c3d8f0a5e6b7c8d9e0f";
 
+        // Зона песни (BlueprintAbilityAreaEffect). Вешается на исполнителя через
+        // AddAreaEffect на SongAureole и раздаёт/снимает бафф песни по входу-выходу
+        // из радиуса. Новый GUID.
+        public const string SongAreaGuid = "d165fa02e71646d39acd7972e6297626";
+
         // Скрытый бафф-носитель визуальной ауреоли, только на самого исполнителя.
         // Нужен отдельным блюпринтом потому, что FxOnStart спавнится на ВЛАДЕЛЬЦЕ баффа
         // (Buff.TrySpawnParticleEffect -> FxHelper.SpawnFxOnUnit(prefab, Owner.Unit.View)):
@@ -54,6 +59,38 @@ namespace SingingBlade
         // самого исполнителя (toCaster): ровно одно кольцо, и штатная очистка баффом.
         public const string InspireCourageAreaFx = "2f93a2909cb766f4d961aee34a3c84c2";
 
+        // --- "Долгая нота": проведение лучевых заклинаний через удар клинком ---
+        // БОЛЬШЕ НЕ ИСПОЛЬЗУЕТСЯ. Была скрытой фичей-переносчиком в штатной цепочке
+        // "зачарование -> AddUnitFeatureEquipment -> фича -> AddFacts -> переключатель".
+        // Цепочка рвалась молча (компоненты на блюпринте есть, до персонажа не доезжает
+        // ничего, в логе ни одного исключения), поэтому заменена прямой выдачей из кода —
+        // см. SustainedNoteGrant. Блюпринт с этим GUID больше не создаётся; сам GUID
+        // НЕ переиспользовать под другое, чтобы не путать историю сессий.
+        public const string SustainedNoteFeatureGuid = "bf4bc6de66d24b339410d508379c2d9a";
+        // Сам переключатель (BlueprintActivatableAbility).
+        public const string SustainedNoteToggleGuid = "66a55d4b4da64eb9879ef66cca96d6a5";
+        // Бафф "переключатель включён" — обязательное поле m_Buff у активируемой способности,
+        // заодно по нему код проверяет, включён ли режим.
+        public const string SustainedNoteBuffGuid = "aec52e83d3404b649be6446df6e9867c";
+
+        // Книги заклинаний Магуса и Чародейского наследника. Нужны, чтобы определить
+        // "своё" заклинание САМОСТОЯТЕЛЬНО, а не через UnitPartMagus.IsSpellFromMagusSpellList:
+        // тот резолвит книгу строго через BlueprintRoot.SystemMechanics.MagusClass, и на
+        // ОТДЕЛЬНОМ классе Чародейского наследника (EldritchScionClass, см. ниже) вернул бы
+        // null со всеми вытекающими. Обе книги указывают на один и тот же спеллбук-блюпринт
+        // и у класса-наследника, и у архетипа поверх Магуса — поэтому проверка по книге
+        // покрывает оба способа быть Наследником.
+        public const string MagusSpellbook = "5d8d04e76dff6c5439de99af0d57be63";
+        public const string EldritchScionSpellbook = "e2763fbfdb91920458c4686c3e7ed085";
+
+        // Список заклинаний Магуса. ОСНОВНАЯ проверка "своё заклинание" идёт по нему,
+        // а не по книге: и книга Магуса, и книга Чародейского наследника ссылаются на
+        // ОДИН И ТОТ ЖЕ список (проверено в .jbp обоих спеллбуков), а сам список не
+        // зависит от того, из какой книги заклинание в итоге кастуется. Это важно для
+        // модов вроде MythicMagicMayhem, которые сливают книги: проверка по книге там
+        // перестала бы узнавать заклинание, а проверка по списку продолжит работать.
+        public const string MagusSpellList = "4d72e1e7bd6bc4f4caaea7aa43a14639";
+
         // Служебный маркер-бафф "уже спели в этом раунде" — не даёт песне срабатывать
         // больше одного раза за раунд даже при нескольких критах в серии ударов.
         // Новый GUID (не было в исходном списке заготовок).
@@ -64,6 +101,11 @@ namespace SingingBlade
 
         public const string SpellCombatBuff = "91e4b45ab5f29574aa1fb41da4bbdcf2";
         public const string SpellStrikeBuff = "06e0c9887eb1724409977dac7168bfd7";
+
+        // Сами способности Магуса (не баффы) — берём иконку "Удара заклинателя"
+        // для нашей "Долгой ноты", она читается игроком как родственная механика.
+        public const string SpellCombatAbility = "8898a573e8a8a184b8186dbc3a26da74";
+        public const string SpellStrikeAbility = "e958891ef90f7e142a941c06c811181e";
 
         // ОТКЛЮЧЕНО по прямой просьбе пользователя (эхо-урон по врагам задевал союзных,
         // но неподконтрольных игроку NPC, плюс потиковая AreaEffect-зона ниже крашилась

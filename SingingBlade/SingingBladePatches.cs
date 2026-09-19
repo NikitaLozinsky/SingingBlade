@@ -2,6 +2,11 @@ using HarmonyLib;
 using Kingmaker.Blueprints.JsonSystem;
 using Kingmaker.Localization;
 using Kingmaker.Localization.Shared;
+using Kingmaker.PubSubSystem;
+using Kingmaker.RuleSystem;
+using Kingmaker.RuleSystem.Rules;
+using Kingmaker.UnitLogic.Commands;
+using Kingmaker.UnitLogic.Commands.Base;
 
 namespace SingingBlade
 {
@@ -21,6 +26,25 @@ namespace SingingBlade
             _initialized = true;
 
             SingingBladeBlueprints.Create();
+            SustainedNote.Subscribe();
+        }
+    }
+
+    // "Долгая нота": перехват каста лучевого заклинания, чтобы вместо дальнобойной
+    // атаки касанием персонаж ударил клинком, а заклинание ушло вместе с ударом.
+    // Точка та же, что использует ванильный Эльдричский лучник (там этот код стоит
+    // прямо в теле OnAction и требует firstWeapon.Blueprint.IsRanged).
+    //
+    // Префикс сознательно НЕ подменяет ветки отказа: если каст по какой-то причине
+    // невозможен, TryInterceptCast возвращает false, и дальше работает ванильный
+    // OnAction со всеми своими проверками и FX прерывания.
+    [HarmonyPatch(typeof(UnitUseAbility), "OnAction")]
+    public static class UnitUseAbility_OnAction_Patch
+    {
+        public static bool Prefix(UnitUseAbility __instance, ref UnitCommand.ResultType __result)
+        {
+            if (!Main.Enabled) return true;
+            return !SustainedNote.TryInterceptCast(__instance, ref __result);
         }
     }
 

@@ -23,6 +23,8 @@ namespace SingingBlade
         public const string ItemFlavorText = "SingingBlade.Item.FlavorText";
         public const string SungThisRoundFlagName = "SingingBlade.SungThisRoundFlag.Name";
         public const string SungThisRoundFlagDescription = "SingingBlade.SungThisRoundFlag.Description";
+        public const string SustainedNoteName = "SingingBlade.SustainedNote.Name";
+        public const string SustainedNoteDescription = "SingingBlade.SustainedNote.Description";
     }
 
     internal static class SingingBladeLocalization
