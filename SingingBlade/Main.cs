@@ -11,6 +11,11 @@ namespace SingingBlade
         public static Harmony HarmonyInstance;
         public static bool Enabled;
 
+        // Взводится, если сборка блюпринтов упала на старте игры (см.
+        // StartGameLoader_LoadPackTOC_Patch). Игра при этом запускается, но мода в ней
+        // фактически нет — сообщаем об этом прямо в окне настроек, а не только в логе.
+        public static bool BlueprintsFailed;
+
         private static UnityModManager.ModEntry _modEntry;
 
         private static string _grantStatus = "";
@@ -37,6 +42,14 @@ namespace SingingBlade
             _modEntry?.Logger?.Error($"{where}: {e}");
         }
 
+        // Обычная строка в лог UMM (и в Player.log). Нужна там, где поведение зависит от
+        // состояния пошагового боя, которое снаружи не видно: без такой строки разбирать
+        // "почему персонаж не дошёл" можно только гаданием.
+        public static void Log(string message)
+        {
+            _modEntry?.Logger?.Log(message);
+        }
+
         private static bool OnToggle(UnityModManager.ModEntry modEntry, bool value)
         {
             Enabled = value;
@@ -48,6 +61,12 @@ namespace SingingBlade
         private static void OnGUI(UnityModManager.ModEntry modEntry)
         {
             GUILayout.Label("Поющий клинок — уникальный скимитар для Магуса.");
+
+            if (BlueprintsFailed)
+            {
+                GUILayout.Label("ОШИБКА: блюпринты мода не собрались при запуске игры. " +
+                                "Мод не работает, подробности — в Player.log (строка [SingingBlade]).");
+            }
 
             if (GUILayout.Button("Выдать Поющий клинок в инвентарь партии", GUILayout.ExpandWidth(false)))
             {

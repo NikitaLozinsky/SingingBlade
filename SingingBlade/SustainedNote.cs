@@ -4,6 +4,7 @@ using System.Reflection;
 using Kingmaker;
 using Kingmaker.Blueprints;
 using Kingmaker.Blueprints.Classes.Spells;
+using Kingmaker.Blueprints.Facts;
 using Kingmaker.Blueprints.Items.Weapons;
 using Kingmaker.EntitySystem.Entities;
 using Kingmaker.Items;
@@ -14,12 +15,15 @@ using Kingmaker.RuleSystem.Rules;
 using Kingmaker.RuleSystem.Rules.Abilities;
 using Kingmaker.UnitLogic;
 using Kingmaker.UnitLogic.Abilities;
+using Kingmaker.UnitLogic.Abilities.Blueprints;
 using Kingmaker.UnitLogic.ActivatableAbilities;
 using Kingmaker.UnitLogic.Buffs.Blueprints;
 using Kingmaker.UnitLogic.Commands;
 using Kingmaker.UnitLogic.Commands.Base;
 using Kingmaker.Utility;
 using Kingmaker.Visual.Particles.FxSpawnSystem;
+using Pathfinding;
+using TurnBased.Controllers;
 
 namespace SingingBlade
 {
@@ -94,10 +98,121 @@ namespace SingingBlade
         }
     }
 
+    // Выдаёт бесплатную атаку, пока заклинание лежит "на клинке", и пишет в лог судьбу
+    // команды атаки.
+    //
+    // Зачем: в пошаговом бою атака после потраченного основного действия отбивается
+    // движком в UnitCommandController.TickCommandTurnBased —
+    //     flag3 = command.IsIgnoreCooldown || (CanActInCombat && !HasCooldownForCommand(command));
+    //     if (!num || !flag3) { command.ForceFinishForTurnBased(Success); Queue.Clear(); }
+    // то есть команда молча "завершается успехом", не ударив. Именно так выглядел баг
+    // "подходит к врагу и не атакует".
+    //
+    // Ванильный магус обходит это ровно здесь же: MagusController.HandleUnitRunCommand
+    // на старте команды зовёт unitAttack.IgnoreCooldown(...), если движок знает, что у
+    // магуса подготовлен Заклинательный удар (PreparedSpellStrike / PreparedSpellCombat).
+    // Наш "карман" движку не виден, поэтому ту же услугу оказываем себе сами — тем же
+    // способом и в той же точке жизненного цикла.
+    internal class SustainedNoteCommands : IUnitRunCommandHandler, IUnitCommandStartHandler, IUnitCommandEndHandler
+    {
+        public void HandleUnitRunCommand(UnitCommand cmd)
+        {
+            try
+            {
+                if (!(cmd is UnitAttack attack)) return;
+                if (!SustainedNote.HasSpellOnBlade(cmd.Executor)) return;
+
+                // Ровно одна атака оружием в дополнение к заклинанию — как у
+                // Заклинательного удара (и как у нашей собственной команды).
+                attack.IsSingleAttack = true;
+                attack.IgnoreCooldown();
+                Main.Log("SustainedNote: атаке разрешён бесплатный удар (заклинание на клинке)");
+            }
+            catch (Exception e)
+            {
+                Main.LogError("SustainedNote.HandleUnitRunCommand", e);
+            }
+        }
+
+        // Диагностика: без неё судьбу команды в пошаговом режиме не отследить — движок
+        // гасит её через ForceFinishForTurnBased(Success), то есть без ошибки в логе и
+        // без внешних признаков. Пишем по носителю клинка, а не по "есть ли заклинание
+        // в кармане": иначе не увидеть как раз те случаи, где карман уже опустел.
+        public void HandleUnitCommandDidStart(UnitCommand cmd)
+        {
+            Trace(cmd, "стартовала");
+        }
+
+        public void HandleUnitCommandDidEnd(UnitCommand cmd)
+        {
+            Trace(cmd, "завершилась");
+        }
+
+        private static void Trace(UnitCommand cmd, string what)
+        {
+            try
+            {
+                if (cmd == null || !SustainedNote.HoldsSingingBlade(cmd.Executor)) return;
+
+                var turn = Game.Instance.TurnBasedCombatController?.CurrentTurn;
+                Main.Log($"SustainedNote: команда {cmd.GetType().Name} ({cmd.Type}) {what}: " +
+                         $"Result={cmd.Result}, стартовала={cmd.IsStarted}, " +
+                         $"безКулдауна={cmd.IsIgnoreCooldown}, нуженПодход={cmd.ShouldUnitApproach}, " +
+                         $"ходДействует={(turn != null ? turn.IsActing.ToString() : "нет хода")}, " +
+                         $"заклинаниеНаКлинке={SustainedNote.HasSpellOnBlade(cmd.Executor)}");
+            }
+            catch (Exception e)
+            {
+                Main.LogError("SustainedNote.Trace", e);
+            }
+        }
+    }
+
     internal static class SustainedNote
     {
+        // ====================================================================
+        // РЕЖИМ РАБОТЫ "ДОЛГОЙ НОТЫ" — переключается ровно этой одной строкой
+        // ====================================================================
+        //
+        // true  — ДИСТАНЦИОННЫЙ УДАР (текущий режим, выбран пользователем 2026-09-21).
+        //         "Долгая нота" — активируемая способность: быстрое действие, стоит очко
+        //         Мистического резерва, на несколько раундов удлиняет досягаемость клинка
+        //         (бафф с бонусом к стату Reach). Пока она действует, магус бьёт скимитаром
+        //         на расстоянии, и заклинание с дистанционной атакой касанием уходит тем же
+        //         ударом — с места, без подбегания.
+        //
+        // false — СТАРАЯ СХЕМА (подбежать и ударить). "Долгая нота" — липкий переключатель,
+        //         досягаемость не меняется, а после каста мод сам ставит в очередь команду
+        //         атаки и прокладывает ей путь до цели. Весь код этой схемы СОХРАНЁН и
+        //         рабочий (TryPrepareApproach / TryAllowNormalMovement / PathLength и
+        //         BuildSustainedNoteToggle в блюпринтах) — переключение флага возвращает её
+        //         целиком, пересборка обязательна, т.к. блюпринты строятся при загрузке.
+        //
+        // Почему ушли от неё: подход к цели из кода — это три независимых слоя пошаговой
+        // механики (путь в пуле A*, режим пятифутового шага, гейт бесплатной атаки), каждый
+        // из которых ломался молча. Дистанционный удар снимает саму необходимость подхода.
+        public static readonly bool RangedStrike = true;
+
+        // Насколько "Долгая нота" удлиняет досягаемость клинка, в футах.
+        //
+        // Движок считает дальность оружия как weapon.AttackRange + Stats.ReachRange, где
+        // ReachRange = max(Reach - 5, 0). То есть бонус +20 к стату Reach даёт скимитару
+        // (базовые 5 футов) дальность удара 25 футов.
+        //
+        // Число намеренно умеренное: дальность оружия — это не только про удар, от неё же
+        // считается зона угрозы и сцепка в ближнем бою (UnitHelper.GetThreatRange). Зону
+        // угрозы мы возвращаем к ванильной отдельным патчем (см. SingingBladePatches),
+        // но чем скромнее бонус, тем меньше мест, где он может вылезти боком.
+        public const int ReachBonusFeet = 20;
+
+        // Сколько держится режим с одного применения (в секундах, как и остальные
+        // длительности мода). 60 секунд = 10 раундов — как у ванильного Мистического
+        // оружия, которое тоже стоит очко резерва.
+        public const float RangedStrikeDurationSeconds = 60f;
+
         private static SustainedNoteDelivery _deliverySubscriber;
         private static SustainedNoteGrant _grantSubscriber;
+        private static SustainedNoteCommands _commandSubscriber;
 
         // Вызывается один раз вместе с регистрацией блюпринтов.
         public static void Subscribe()
@@ -112,6 +227,12 @@ namespace SingingBlade
             {
                 _grantSubscriber = new SustainedNoteGrant();
                 EventBus.Subscribe(_grantSubscriber);
+            }
+
+            if (_commandSubscriber == null)
+            {
+                _commandSubscriber = new SustainedNoteCommands();
+                EventBus.Subscribe(_commandSubscriber);
             }
         }
 
@@ -137,19 +258,42 @@ namespace SingingBlade
             {
                 if (unit?.Descriptor == null) return;
 
-                var toggle = ResourcesLibrary.TryGetBlueprint<BlueprintActivatableAbility>(Guids.SustainedNoteToggleGuid);
-                if (toggle == null) return;
+                // Что именно выдаём, зависит от режима (см. RangedStrike): активируемую
+                // способность с платой из резерва либо старый липкий переключатель.
+                BlueprintUnitFact granted = RangedStrike
+                    ? (BlueprintUnitFact)ResourcesLibrary.TryGetBlueprint<BlueprintAbility>(Guids.SustainedNoteAbilityGuid)
+                    : ResourcesLibrary.TryGetBlueprint<BlueprintActivatableAbility>(Guids.SustainedNoteToggleGuid);
+                if (granted == null) return;
+
+                // Факт другого режима мог остаться на персонаже с прошлой сборки — снимаем,
+                // иначе в панели висели бы обе кнопки сразу.
+                var stale = RangedStrike
+                    ? (BlueprintUnitFact)ResourcesLibrary.TryGetBlueprint<BlueprintActivatableAbility>(Guids.SustainedNoteToggleGuid)
+                    : ResourcesLibrary.TryGetBlueprint<BlueprintAbility>(Guids.SustainedNoteAbilityGuid);
+                if (stale != null && unit.Descriptor.HasFact(stale)) unit.Descriptor.RemoveFact(stale);
 
                 var shouldHave = HoldsSingingBlade(unit);
-                var hasIt = unit.Descriptor.HasFact(toggle);
+                var hasIt = unit.Descriptor.HasFact(granted);
 
                 if (shouldHave && !hasIt)
                 {
-                    unit.Descriptor.AddFact(toggle);
+                    unit.Descriptor.AddFact(granted);
                 }
                 else if (!shouldHave && hasIt)
                 {
-                    unit.Descriptor.RemoveFact(toggle);
+                    unit.Descriptor.RemoveFact(granted);
+                }
+
+                // Клинок убрали из рук — снимаем и сам режим. Иначе в дистанционном режиме
+                // у персонажа осталась бы удлинённая досягаемость (бафф живёт минуту сам по
+                // себе) уже без Поющего клинка, что выглядит как читерский бонус из ниоткуда.
+                if (!shouldHave)
+                {
+                    var modeBuff = ResourcesLibrary.TryGetBlueprint<BlueprintBuff>(Guids.SustainedNoteBuffGuid);
+                    if (modeBuff != null && unit.Descriptor.HasFact(modeBuff))
+                    {
+                        unit.Descriptor.RemoveFact(modeBuff);
+                    }
                 }
             }
             catch (Exception e)
@@ -207,16 +351,8 @@ namespace SingingBlade
                 if (!spell.IsAvailable) return false;
                 if (!target.IsInGame || target.Descriptor.State.IsDead) return false;
 
-                Store(caster, spell);
-
-                // FX подготовки заклинания в руках надо погасить вместе с атакой,
-                // иначе он останется висеть (ровно тот класс багов, на который мы
-                // уже дважды напарывались с незакрытыми партиклами).
-                var handFx = TakeHandFx(command);
-
                 var attack = new UnitAttack(target)
                 {
-                    ClearFxOnAttack = handFx,
                     // ВСЕГДА одиночная атака. У ванильного Эльдричского лучника здесь
                     // стоит (Type == Swift), то есть на обычном касте выходит ПОЛНАЯ
                     // серия ударов — для лука это уместно, а у нас давало вторую атаку
@@ -226,7 +362,22 @@ namespace SingingBlade
                     IsSingleAttack = true
                 };
                 attack.IgnoreCooldown();
+
+                // Путь до цели прокладываем ДО того, как что-либо испортим: если дойти
+                // нельзя, перехват отменяется целиком и заклинание уходит обычным
+                // способом, по воздуху. Иначе игрок остался бы и без луча, и без удара.
+                if (!TryPrepareApproach(caster, target, weapon, attack)) return false;
+
+                Store(caster, spell);
+
+                // FX подготовки заклинания в руках надо погасить вместе с атакой,
+                // иначе он останется висеть (ровно тот класс багов, на который мы
+                // уже дважды напарывались с незакрытыми партиклами).
+                attack.ClearFxOnAttack = TakeHandFx(command);
                 caster.Commands.AddToQueueFirst(attack);
+                Main.Log($"SustainedNote: атака поставлена в очередь " +
+                         $"(в очереди {caster.Commands.Queue.Count}, " +
+                         $"основное действие занято: {caster.Commands.Standard != null})");
 
                 result = UnitCommand.ResultType.Success;
                 return true;
@@ -239,6 +390,146 @@ namespace SingingBlade
                 Main.LogError("SustainedNote.TryInterceptCast", e);
                 return false;
             }
+        }
+
+        // Готовит команду атаки к подходу: в пошаговом бою движок НЕ умеет сам вести
+        // юнита к цели по команде, созданной из кода.
+        //
+        // UnitCommand.TickApproaching() в пошаговом режиме берёт путь либо из
+        // command.ForcedPath, либо из PathVisualizer (путь, который проложил курсор
+        // игрока), и, не найдя ни того ни другого, НЕМЕДЛЕННО обрывает команду:
+        //     "Interrupting command ... because forcedPath was null or empty" -> Interrupt().
+        // Наш UnitAttack рождается в момент каста, клика по врагу с прокладкой пути не
+        // было — поэтому в отдалении от цели атака умирала сразу, а ход на этом и
+        // заканчивался. Вплотную всё работало лишь потому, что подход не нужен вовсе
+        // (ShouldUnitApproach == false).
+        //
+        // Ванильного примера "скастовал -> подбежал -> ударил" в игре нет: Эльдричскому
+        // лучнику подход не нужен (радиус подхода равен дальности выстрела), а у мили-
+        // Заклинательного удара команду атаки создаёт сам клик игрока в
+        // UnitUseAbility.CreateCastCommand, и путь приходит от курсора. Поэтому строим
+        // путь сами — ровно тем же способом, что и ванильный UnitFearController для
+        // своей UnitMoveTo: AgentASP.FindPath -> BlockUntilCalculated -> ForcedPath.
+        //
+        // Возвращает false, если дойти нельзя — тогда перехват отменяется целиком.
+        private static bool TryPrepareApproach(UnitEntityData caster, UnitEntityData target,
+                                               ItemEntityWeapon weapon, UnitAttack attack)
+        {
+            // Тот же радиус, что посчитает себе сама команда в UnitAttack.Init(): дальность
+            // оружия + объём обоих тел. В режиме дистанционного удара дальность оружия уже
+            // включает бонус "Долгой ноты" к Reach, поэтому обычно мы попадаем сюда же.
+            var radius = UnitAttack.GetApproachRadius(weapon, caster, target);
+            // Уже в досягаемости удара — подход не нужен, ни путь, ни возня с режимом хода.
+            if (caster.DistanceTo(target) <= radius) return true;
+
+            // Режим дистанционного удара подбегания НЕ предусматривает вовсе: клинок достаёт
+            // ровно настолько, насколько его удлинила "Долгая нота". Цель дальше — значит
+            // это не наш случай, отдаём каст ванили, и заклинание улетит обычным лучом.
+            if (RangedStrike) return false;
+
+            // Дальше — старая схема "подбежать и ударить" (RangedStrike = false).
+            // В реальном времени путь прокладывает сам движок (ветка view.MoveTo в
+            // TickApproaching), вмешиваться незачем и нечем.
+            if (!CombatController.IsInTurnBasedCombat()) return true;
+
+            var turn = Game.Instance.TurnBasedCombatController?.CurrentTurn;
+            if (turn == null) return false;
+
+            if (!TryAllowNormalMovement(turn, caster, target, radius)) return false;
+
+            var agent = caster.View?.AgentASP;
+            if (agent == null) return false;
+
+            // callback обязателен по сигнатуре, но нам сообщать нечего: путь мы тут же
+            // дожидаемся синхронно.
+            Path path = agent.FindPath(target.Position, delegate { }, radius);
+            // null = агент уже считает другой путь. Лучше отдать каст ванили, чем
+            // поставить в очередь атаку, которая всё равно оборвётся.
+            if (path == null) return false;
+
+            // ПОРЯДОК ЭТИХ ДВУХ СТРОК ПРИНЦИПИАЛЕН, и ровно в нём была ошибка.
+            // Путь отдаём команде СРАЗУ, до ожидания расчёта, — так делает и ванильный
+            // UnitFearController (`ForcedPath = FindPath(...)`, и только потом
+            // BlockUntilCalculated). Причина: в колбэк FindPath зашит
+            // `m_Seeker.ReleaseClaimedPath()`, поэтому к моменту возврата из
+            // BlockUntilCalculated у пути не остаётся ни одного держателя, A* забирает
+            // его в пул и очищает vectorPath. Сеттер ForcedPath делает Claim(this) —
+            // присвоив заранее, мы удерживаем путь живым. Присваивание ПОСЛЕ ожидания
+            // давало команде уже переработанный пулом путь, и TickApproaching обрывал её
+            // на первом же тике ("forcedPath was null or empty"): в логе это выглядело
+            // как `UnitAttack ... Result=Interrupt, стартовала=False, нуженПодход=True`.
+            attack.ForcedPath = path;
+
+            AstarPath.BlockUntilCalculated(path);
+            if (path.error || path.vectorPath == null || path.vectorPath.Count == 0)
+            {
+                attack.ForcedPath = null;
+                return false;
+            }
+
+            // Дойти должно хватить ОСТАВШЕГОСЯ хода. FindPath обрезает путь по запасу на
+            // целый раунд (maxLength = 6 * CurrentSpeedMps, то есть два действия движения),
+            // а у нас основное действие уже потрачено на каст — остаётся одно. Если пути
+            // не хватает, перехват отменяем: пусть заклинание улетит обычным лучом, чем
+            // персонаж уйдёт в никуда и застрянет с недошедшей атакой.
+            var available = turn.GetRemainingMovementRange(caster, total: false, singleActionMove: false);
+            var needed = PathLength(path);
+            Main.Log($"SustainedNote: подход {needed:F1} м из доступных {available:F1} м " +
+                     $"(режим хода {turn.CurrentMovementLimit}, радиус удара {radius:F1} м)");
+            if (needed > available)
+            {
+                attack.ForcedPath = null;
+                return false;
+            }
+
+            return true;
+        }
+
+        // Переводит ход из режима ПЯТИФУТОВОГО ШАГА в обычное движение, если пятью футами
+        // до цели не дотянуться.
+        //
+        // Это и было причиной бага "персонаж делает два шага и застывает". Списание
+        // движения в пошаговом бою не смотрит на тип команды — TurnController.TickMovement
+        // смотрит ТОЛЬКО на GetEnabledFiveFootStep(unit):
+        //     if (GetEnabledFiveFootStep(unit)) { MetersMovedByFiveFootStep += ...; }
+        //     else                              { cooldowns.MoveAction += deltaTime; }
+        // А у магуса с активным Заклинательным ударом "умный курсор" почти всегда стоит
+        // на варианте с MovementLimit.FiveFootStep (см. PrepareSmartCursorVariants: первые
+        // пять вариантов из девяти — именно пятифутовые). Движок сам снимает этот режим,
+        // только когда путь ПОД КУРСОРОМ длиннее пяти футов — а у нашей команды никакого
+        // курсорного пути нет.
+        //
+        // Дальше срабатывала ловушка: пройдя 7.5 фута, юнит упирался в
+        //     ShouldRestrictNormalMovement -> MetersMovedByFiveFootStep > 0 -> true
+        // что запрещает обычное движение до конца хода СОВСЕМ. Команда атаки оставалась
+        // висеть (юнит хочет идти, но не может — TickApproaching в этом случае даже не
+        // обрывает её), и ход намертво вставал: ни шагу, ни каста.
+        //
+        // Если же пятифутового шага ХВАТАЕТ, режим не трогаем: он выгоднее — не тратит
+        // действие движения и даёт иммунитет к внеочередным атакам при отходе.
+        private static bool TryAllowNormalMovement(TurnController turn, UnitEntityData caster,
+                                                   UnitEntityData target, float radius)
+        {
+            if (!turn.GetEnabledFiveFootStep(caster)) return true;
+
+            var toGo = caster.DistanceTo(target) - radius;
+            if (toGo <= turn.GetRemainingFiveFootStepRange(caster)) return true;
+
+            // SetMovementLimit молча игнорируется, пока юнит движется, — здесь он стоит
+            // (только что отработал каст), так что смена режима применится.
+            turn.SetMovementLimit(TurnController.MovementLimit.TwoActions);
+
+            // Если режим всё-таки не сменился, подход спишется пятифутовым шагом и
+            // застопорит ход — лучше не перехватывать каст вовсе.
+            return !turn.GetEnabledFiveFootStep(caster);
+        }
+
+        private static float PathLength(Path path)
+        {
+            var points = path.vectorPath;
+            var length = 0f;
+            for (var i = 1; i < points.Count; i++) length += UnityEngine.Vector3.Distance(points[i - 1], points[i]);
+            return length;
         }
 
         // ----------------------------------------------------------------
@@ -301,6 +592,34 @@ namespace SingingBlade
             _caster = caster;
             _spell = spell;
             _storedAt = Game.Instance.TimeController.GameTime;
+        }
+
+        // Возвращает зону угрозы к ванильной, вычитая наш бонус к досягаемости.
+        //
+        // Зачем: движок считает зону угрозы (внеочередные атаки, сцепка в ближнем бою) от
+        // той же дальности оружия, что и сам удар — UnitHelper.GetThreatRange возвращает
+        // hand.Weapon.AttackRange.Meters. Без этого магус с "Долгой нотой" начал бы
+        // угрожать и бить внеочередными атаками на всю дистанцию удара, а враги считались
+        // бы с ним в ближнем бою через полполя. Пользователь просил зону не раздувать,
+        // поэтому дальность УДАРА растёт, а зона УГРОЗЫ остаётся ванильной.
+        //
+        // Вычитаем ровно свой вклад, а не обнуляем: бонусы от Увеличения, оружия с
+        // досягаемостью и прочего должны продолжать работать как обычно.
+        public static void TrimThreatRange(UnitEntityData unit, ref float? threatRange)
+        {
+            if (!RangedStrike || threatRange == null || unit == null) return;
+            if (!IsModeActive(unit)) return;
+
+            threatRange = Math.Max(0f, threatRange.Value - ReachBonusFeet.Feet().Meters);
+        }
+
+        // Лежит ли сейчас заклинание "на клинке" у этого юнита. В отличие от Take() не
+        // трогает содержимое кармана — только смотрит.
+        public static bool HasSpellOnBlade(UnitEntityData unit)
+        {
+            if (unit == null || _spell == null || _caster != unit) return false;
+            if (Game.Instance.TimeController.GameTime - _storedAt > 1.Rounds().Seconds) return false;
+            return IsModeActive(unit);
         }
 
         public static void Clear()

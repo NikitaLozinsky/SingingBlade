@@ -54,6 +54,16 @@
             <HintPath>$(ManagedPath)\UnityEngine.ImageConversionModule.dll</HintPath>
             <Private>False</Private>
         </Reference>
+        <!-- Нужен "Долгой ноте" для подхода к цели в ПОШАГОВОМ бою: движок ведёт юнита
+             только по заранее построенному пути (UnitCommand.TickApproaching берёт его
+             из ForcedPath либо из PathVisualizer и без пути немедленно Interrupt()-ит
+             команду). Команду атаки мы создаём из кода, клика с прокладкой пути не было,
+             поэтому путь строим сами через AgentASP.FindPath — а типы Path/AstarPath
+             живут именно в этой сборке, не в Assembly-CSharp. -->
+        <Reference Include="AstarPathfindingProject">
+            <HintPath>$(ManagedPath)\AstarPathfindingProject.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
     </ItemGroup>
 
     <ItemGroup>

@@ -73,6 +73,18 @@ namespace SingingBlade
         // заодно по нему код проверяет, включён ли режим.
         public const string SustainedNoteBuffGuid = "aec52e83d3404b649be6446df6e9867c";
 
+        // Активируемая способность "Долгой ноты" в режиме ДИСТАНЦИОННОГО УДАРА
+        // (SustainedNote.RangedStrike): быстрое действие, тратит очко Мистического
+        // резерва, вешает на исполнителя SustainedNoteBuff. Новый GUID, сгенерирован
+        // 2026-09-21, проверен на отсутствие коллизий с остальными GUID мода.
+        // В режиме переключателя (старая схема) НЕ используется.
+        public const string SustainedNoteAbilityGuid = "001d4da034f243508388779003d19645";
+
+        // Мистический резерв магуса (BlueprintAbilityResource) — из него "Долгая нота"
+        // берёт плату. Тот же ресурс, что тратят ванильные арканы вроде Мистической
+        // точности (ArcaneAccuracyAbility, компонент AbilityResourceLogic).
+        public const string ArcanePoolResource = "effc3e386331f864e9e06d19dc218b37";
+
         // Книги заклинаний Магуса и Чародейского наследника. Нужны, чтобы определить
         // "своё" заклинание САМОСТОЯТЕЛЬНО, а не через UnitPartMagus.IsSpellFromMagusSpellList:
         // тот резолвит книгу строго через BlueprintRoot.SystemMechanics.MagusClass, и на
