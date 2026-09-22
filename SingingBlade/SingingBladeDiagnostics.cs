@@ -3,22 +3,25 @@ using System.Text;
 using Kingmaker;
 using Kingmaker.Blueprints;
 using Kingmaker.Blueprints.Classes;
+using Kingmaker.Blueprints.Items.Ecnchantments;
 using Kingmaker.Blueprints.Items.Weapons;
 using Kingmaker.EntitySystem.Entities;
+using Kingmaker.EntitySystem.Stats;
 using Kingmaker.UnitLogic;
-using Kingmaker.UnitLogic.ActivatableAbilities;
+using Kingmaker.UnitLogic.Abilities.Blueprints;
+using Kingmaker.UnitLogic.Abilities.Components;
 using Kingmaker.UnitLogic.Buffs.Blueprints;
 
 namespace SingingBlade
 {
     // Диагностика состояния мода по кнопке в окне настроек UMM.
     //
-    // Появилась потому, что переключатель "Долгая нота" не доехал до панели
+    // Появилась потому, что переключатель «Разрезать небеса» не доехал до панели
     // способностей, при этом в логах не было НИ ОДНОГО исключения нашего мода —
     // то есть цепочка выдачи рвалась молча. Именно этот отчёт и показал, что
     // блюпринты зарегистрированы и оба компонента на зачаровании есть, а до
     // персонажа не доезжает ничего: после этого штатная цепочка блюпринтов была
-    // заменена на прямую выдачу из кода (SustainedNoteGrant).
+    // заменена на прямую выдачу из кода (CutTheSkiesGrant).
     internal static class SingingBladeDiagnostics
     {
         public static string Report()
@@ -31,18 +34,27 @@ namespace SingingBlade
             // Заодно приводим факт-переключатель в соответствие с экипировкой: если
             // DLL обновили посреди сессии, событие смены экипировки уже не придёт,
             // а перезагружать игру ради этого незачем.
-            SustainedNote.RefreshParty();
+            CutTheSkies.RefreshParty();
 
             var sb = new StringBuilder();
-            sb.AppendLine("(состояние переключателя синхронизировано с экипировкой)");
+            sb.AppendLine("(выданные факты синхронизированы с экипировкой)");
             sb.AppendLine();
 
             // 1. Зарегистрированы ли блюпринты вообще.
+            //
+            // Строка со СПОСОБНОСТЬЮ тут появилась не сразу — и зря: ровно её блюпринт
+            // однажды забыли зарегистрировать в SingingBladeBlueprints.Create(), выдача
+            // молча не состоялась, а отчёт об этом не говорил ничего.
             sb.AppendLine("Блюпринты:");
             sb.AppendLine("  предмет: " + Found<BlueprintItemWeapon>(Guids.ItemGuid));
-            sb.AppendLine("  переключатель: " + Found<BlueprintActivatableAbility>(Guids.SustainedNoteToggleGuid));
-            sb.AppendLine("  бафф режима: " + Found<BlueprintBuff>(Guids.SustainedNoteBuffGuid));
+            sb.AppendLine("  способность (резерв Магуса): " + Found<BlueprintAbility>(Guids.CutTheSkiesAbilityGuid));
+            sb.AppendLine("  способность (резерв Наследника): " + Found<BlueprintAbility>(Guids.CutTheSkiesAbilityEldritchGuid));
+            sb.AppendLine("  бафф режима: " + Found<BlueprintBuff>(Guids.CutTheSkiesBuffGuid));
             sb.AppendLine("  бафф ауреоли: " + Found<BlueprintBuff>(Guids.SongAureoleGuid));
+            sb.AppendLine("  бафф растяжки досягаемости: " + Found<BlueprintBuff>(Guids.ReachStretchBuffGuid));
+            sb.AppendLine("  зачарование «Гроза Элизиума»: " + Found<BlueprintWeaponEnchantment>(Guids.StormEnchantmentGuid));
+            sb.AppendLine("  фича грозы (носитель): " + Found<BlueprintFeature>(Guids.StormFeatureGuid));
+            sb.AppendLine("  фича грозы (дракон): " + Found<BlueprintFeature>(Guids.StormPetFeatureGuid));
 
             // 2. Кто держит клинок. Ищем по всей партии, а не только у ГГ —
             // предмет мог перекочевать к компаньону.
@@ -73,18 +85,35 @@ namespace SingingBlade
 
             sb.AppendLine("Клинок в руках у: " + wielder.CharacterName);
 
-            // 3. Доехал ли переключатель до носителя.
-            var toggle = ResourcesLibrary.TryGetBlueprint<BlueprintActivatableAbility>(Guids.SustainedNoteToggleGuid);
+            // 3. Доехало ли до носителя то, что должно — в ТЕКУЩЕМ режиме.
+            //
+            // Печатаем ОБА варианта способности: так видно и то, что выдалось, и то, что
+            // осталось от прошлой сборки, если резерв персонажа определился иначе.
+            var abilityMagus = ResourcesLibrary.TryGetBlueprint<BlueprintAbility>(Guids.CutTheSkiesAbilityGuid);
+            var abilityEldritch = ResourcesLibrary.TryGetBlueprint<BlueprintAbility>(Guids.CutTheSkiesAbilityEldritchGuid);
+            sb.AppendLine("  способность как факт (вариант Магуса): " +
+                          YesNo(abilityMagus != null && wielder.Descriptor.HasFact(abilityMagus)));
+            sb.AppendLine("  способность как факт (вариант Наследника): " +
+                          YesNo(abilityEldritch != null && wielder.Descriptor.HasFact(abilityEldritch)));
 
-            sb.AppendLine("  переключатель как факт: " + YesNo(toggle != null && wielder.Descriptor.HasFact(toggle)));
+            var inAbilityList = wielder.Descriptor.Abilities?.Enumerable
+                ?.Any(a => a.Blueprint == abilityMagus || a.Blueprint == abilityEldritch) == true;
+            sb.AppendLine("  способность в списке способностей: " + YesNo(inAbilityList));
 
-            var activatable = wielder.Descriptor.ActivatableAbilities?.Enumerable
-                ?.FirstOrDefault(a => a.Blueprint == toggle);
-            sb.AppendLine("  переключатель в списке активируемых: " + YesNo(activatable != null));
-            if (activatable != null)
+            // «Гроза Элизиума»: фича носителя выдаётся из кода, а фича дракона — уже
+            // компонентом AddFeatureToPet из неё. Печатаем обе, иначе разорванную цепочку
+            // "фича есть, а у Айву нет" снаружи не увидеть никак.
+            var stormFeature = ResourcesLibrary.TryGetBlueprint<BlueprintFeature>(Guids.StormFeatureGuid);
+            sb.AppendLine("  фича «Грозы Элизиума»: " +
+                          YesNo(stormFeature != null && wielder.Descriptor.HasFact(stormFeature)));
+
+            var stormPetFeature = ResourcesLibrary.TryGetBlueprint<BlueprintFeature>(Guids.StormPetFeatureGuid);
+            foreach (var pet in wielder.Pets)
             {
-                sb.AppendLine("    включён: " + YesNo(activatable.IsOn));
-                sb.AppendLine("    доступен (IsAvailable): " + YesNo(activatable.IsAvailable));
+                var petUnit = pet.Entity;
+                if (petUnit == null) continue;
+                sb.AppendLine("    питомец " + petUnit.CharacterName + ": фича грозы — " +
+                              YesNo(stormPetFeature != null && petUnit.Descriptor.HasFact(stormPetFeature)));
             }
 
             // 4. Зачарования на самом клинке — если нашего тут нет, вопрос к предмету.
@@ -107,7 +136,7 @@ namespace SingingBlade
             // "песнь не звучит".
             sb.AppendLine();
             sb.AppendLine("Песнь сейчас звучит на носителе: " + YesNo(HasBuff(wielder, Guids.SongAureoleGuid)));
-            sb.AppendLine("Режим 'Долгая нота' активен: " + YesNo(SustainedNote.IsModeActive(wielder)));
+            sb.AppendLine("Режим «Разрезать небеса» активен: " + YesNo(CutTheSkies.IsModeActive(wielder)));
 
             // 6. Наши баффы с остатком времени. Нужно для разбора случая "крит был,
             // а песня не продлилась": единственное, что может не дать песне зазвучать
@@ -120,9 +149,45 @@ namespace SingingBlade
             AppendBuff(sb, wielder, Guids.SongBuffGuid, "Песнь клинка");
             AppendBuff(sb, wielder, Guids.SongBuffEmpoweredGuid, "Песнь клинка (усиленная)");
             AppendBuff(sb, wielder, Guids.SongAureoleGuid, "ауреоль");
-            AppendBuff(sb, wielder, Guids.SustainedNoteBuffGuid, "режим Долгой ноты");
+            AppendBuff(sb, wielder, Guids.CutTheSkiesBuffGuid, "режим «Разрезать небеса»");
+            AppendBuff(sb, wielder, Guids.ReachStretchBuffGuid, "растяжка досягаемости");
+
+            // Досягаемость клинка — ГЛАВНЫЙ признак того, работает ли дистанционный удар.
+            // Весь режим держится на одном бонусе к стату Reach, и когда компонент этого
+            // бонуса однажды забыли положить в бафф, снаружи это выглядело как "способность
+            // тратится, а поведение обычное" — по этим двум числам было бы видно сразу.
+            // Движок считает так: AttackRange оружия = базовая дальность + max(Reach - 5, 0).
+            sb.AppendLine();
+            var reach = wielder.Stats?.GetStat(StatType.Reach)?.ModifiedValue ?? 0;
+            sb.AppendLine("Досягаемость: стат Reach = " + reach +
+                          " (у среднего существа без бонусов 5), дальность удара клинком = " +
+                          (weapon != null ? weapon.AttackRange.Value + " футов" : "клинок не найден"));
 
             return sb.ToString();
+        }
+
+        // Есть ли у персонажа такой резерв и сколько в нём очков.
+        //
+        // Отличать "резерва нет вовсе" от "резерв пуст" важно: в первом случае способность
+        // просто не тот вариант (у Наследника свой блюпринт резерва), во втором — всё верно,
+        // надо отдохнуть. Снаружи оба случая выглядят одинаково: счётчик 0 и "нет ресурсов".
+        private static void AppendResource(StringBuilder sb, UnitEntityData unit, string guid, string label)
+        {
+            var resource = ResourcesLibrary.TryGetBlueprint<BlueprintAbilityResource>(guid);
+            if (resource == null)
+            {
+                sb.AppendLine("  " + label + ": блюпринт ресурса не найден");
+                return;
+            }
+
+            var has = false;
+            foreach (var owned in unit.Descriptor.Resources)
+            {
+                if (owned == resource) { has = true; break; }
+            }
+
+            sb.AppendLine("  " + label + ": " +
+                          (has ? "есть, очков " + unit.Descriptor.Resources.GetResourceAmount(resource) : "нет"));
         }
 
         private static void AppendBuff(StringBuilder sb, UnitEntityData unit, string guid, string label)

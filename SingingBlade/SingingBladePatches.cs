@@ -47,12 +47,12 @@ namespace SingingBlade
             }
 
             // Подписки боевого конвейера включаем только если блюпринты собрались:
-            // без них "Долгой ноте" всё равно не на что ссылаться.
-            SustainedNote.Subscribe();
+            // без них способности «Разрезать небеса» всё равно не на что ссылаться.
+            CutTheSkies.Subscribe();
         }
     }
 
-    // "Долгая нота": перехват каста лучевого заклинания, чтобы вместо дальнобойной
+    // «Разрезать небеса»: перехват каста лучевого заклинания, чтобы вместо дальнобойной
     // атаки касанием персонаж ударил клинком, а заклинание ушло вместе с ударом.
     // Точка та же, что использует ванильный Эльдричский лучник (там этот код стоит
     // прямо в теле OnAction и требует firstWeapon.Blueprint.IsRanged).
@@ -66,13 +66,13 @@ namespace SingingBlade
         public static bool Prefix(UnitUseAbility __instance, ref UnitCommand.ResultType __result)
         {
             if (!Main.Enabled) return true;
-            return !SustainedNote.TryInterceptCast(__instance, ref __result);
+            return !CutTheSkies.TryInterceptCast(__instance, ref __result);
         }
     }
 
     // Зона угрозы (внеочередные атаки и сцепка в ближнем бою) считается от той же
     // дальности оружия, что и сам удар: UnitHelper.GetThreatRange возвращает
-    // hand.Weapon.AttackRange.Meters, а наша "Долгая нота" эту дальность как раз и
+    // hand.Weapon.AttackRange.Meters, а наша способность «Разрезать небеса» эту дальность как раз и
     // удлиняет бонусом к стату Reach. Без этого патча магус угрожал бы и бил
     // внеочередными атаками на всю дистанцию дистанционного удара — пользователь
     // просил зону не раздувать, поэтому здесь мы вычитаем ровно свой вклад обратно.
@@ -86,10 +86,22 @@ namespace SingingBlade
     [HarmonyPatch(typeof(UnitHelper), nameof(UnitHelper.GetThreatRange))]
     public static class UnitHelper_GetThreatRange_Patch
     {
+        // try/catch обязателен: это постфикс на ГОРЯЧЕМ методе боевого конвейера
+        // (зону угрозы движок спрашивает постоянно, для каждого юнита). Любое исключение
+        // отсюда — это не одна ошибка, а поток ошибок и сломанная сцепка в ближнем бою
+        // у всех участников боя.
         public static void Postfix(UnitEntityData unit, ref float? __result)
         {
             if (!Main.Enabled) return;
-            SustainedNote.TrimThreatRange(unit, ref __result);
+
+            try
+            {
+                CutTheSkies.TrimThreatRange(unit, ref __result);
+            }
+            catch (Exception e)
+            {
+                Main.LogError("UnitHelper.GetThreatRange postfix", e);
+            }
         }
     }
 
