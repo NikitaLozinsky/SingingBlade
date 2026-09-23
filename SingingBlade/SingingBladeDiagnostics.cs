@@ -52,6 +52,13 @@ namespace SingingBlade
             sb.AppendLine("  бафф режима: " + Found<BlueprintBuff>(Guids.CutTheSkiesBuffGuid));
             sb.AppendLine("  бафф ауреоли: " + Found<BlueprintBuff>(Guids.SongAureoleGuid));
             sb.AppendLine("  бафф растяжки досягаемости: " + Found<BlueprintBuff>(Guids.ReachStretchBuffGuid));
+
+            // Самопроверка ровно на ту поломку, из-за которой игра не сохранялась:
+            // безымянный компонент блюпринта роняет сериализацию факта
+            // (EntityFact.ComponentsDictionary строит словарь по component.name).
+            // Снаружи это выглядит как окно SAVINGERROR без объяснений, поэтому пусть
+            // будет видно кнопкой.
+            sb.AppendLine("  " + CheckComponentNames());
             sb.AppendLine("  зачарование «Гроза Элизиума»: " + Found<BlueprintWeaponEnchantment>(Guids.StormEnchantmentGuid));
             sb.AppendLine("  фича грозы (носитель): " + Found<BlueprintFeature>(Guids.StormFeatureGuid));
             sb.AppendLine("  фича грозы (дракон): " + Found<BlueprintFeature>(Guids.StormPetFeatureGuid));
@@ -164,6 +171,49 @@ namespace SingingBlade
                           (weapon != null ? weapon.AttackRange.Value + " футов" : "клинок не найден"));
 
             return sb.ToString();
+        }
+
+        // Проверяет, что у всех компонентов всех блюпринтов мода задано имя.
+        //
+        // Имя компонента — это ключ, по которому игра сохраняет данные факта
+        // (EntityFact.ComponentsDictionary). Пустое имя = исключение при сохранении и
+        // окно SAVINGERROR. Имена раздаёт SingingBladeBlueprints.NameElements, а эта
+        // строка подтверждает, что раздача действительно случилась.
+        private static string CheckComponentNames()
+        {
+            var guids = new[]
+            {
+                Guids.ItemGuid, Guids.EnchantmentGuid, Guids.StormEnchantmentGuid,
+                Guids.AbilityGuid, Guids.CutTheSkiesAbilityGuid, Guids.CutTheSkiesAbilityEldritchGuid,
+                Guids.SongBuffGuid, Guids.SongBuffEmpoweredGuid, Guids.SongAureoleGuid,
+                Guids.SungThisRoundFlagGuid, Guids.CutTheSkiesBuffGuid, Guids.ReachStretchBuffGuid,
+                Guids.SongAreaGuid, Guids.StormFeatureGuid, Guids.StormPetFeatureGuid
+            };
+
+            var checkedComponents = 0;
+            var unnamed = 0;
+            var missing = 0;
+
+            foreach (var guid in guids)
+            {
+                var blueprint = ResourcesLibrary.TryGetBlueprint<BlueprintScriptableObject>(guid);
+                if (blueprint == null) { missing++; continue; }
+
+                foreach (var component in blueprint.ComponentsArray ?? new BlueprintComponent[0])
+                {
+                    if (component == null) continue;
+                    checkedComponents++;
+                    if (string.IsNullOrEmpty(component.name)) unnamed++;
+                }
+            }
+
+            if (missing > 0)
+                return "имена компонентов: не найдено блюпринтов — " + missing + " (мод собрался не полностью)";
+
+            return unnamed == 0
+                ? "имена компонентов: в порядке (проверено " + checkedComponents + ")"
+                : "имена компонентов: БЕЗ ИМЕНИ " + unnamed + " из " + checkedComponents +
+                  " — игра НЕ СОХРАНИТСЯ, см. NameElements";
         }
 
         // Есть ли у персонажа такой резерв и сколько в нём очков.

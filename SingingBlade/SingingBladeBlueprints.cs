@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using Kingmaker.Blueprints;
 using Kingmaker.Blueprints.Classes;
 using Kingmaker.Blueprints.Classes.Spells;
@@ -118,10 +119,112 @@ namespace SingingBlade
 
         private static void Register(BlueprintScriptableObject blueprint)
         {
+            // Имена компонентам — ДО всего остального, см. NameElements: без них игра
+            // не может сохраниться.
+            NameElements(blueprint);
+
             // OnEnable проставляет OwnerBlueprint у компонентов — то же самое, что
             // BlueprintsCache.Load() делает для блюпринтов, прочитанных из pack-файла.
             blueprint.OnEnable();
             ResourcesLibrary.BlueprintsCache.AddCachedBlueprint(blueprint.AssetGuid, blueprint);
+        }
+
+        // Раздаёт имена компонентам блюпринта и вложенным в них действиям и условиям.
+        //
+        // ЭТО НЕ КОСМЕТИКА — без имён ИГРА НЕ СОХРАНЯЕТСЯ. `EntityFact` сериализует свои
+        // компоненты словарём, ключ которого — имя компонента блюпринта:
+        //     [JsonProperty(PropertyName = "Components")]
+        //     private Dictionary<string, EntityFactComponent> ComponentsDictionary =>
+        //         Components.ToDictionary(i => i.SourceBlueprintComponentName, i => i);
+        // а `SourceBlueprintComponentName` — это ровно `component.name`. У блюпринтов из
+        // JSON имя есть всегда ("$AddInitiatorAttackWithWeaponTrigger$c1894e60-..."), а у
+        // собранных через `new` оно остаётся C#-null, и `ToDictionary` падает с
+        // "Value cannot be null. Parameter name: key". Сохранение при этом не просто
+        // ругается в лог, а ОБРЫВАЕТСЯ: игрок видит окно SAVINGERROR и не может сохраниться.
+        //
+        // Побочно имена чинят ещё одну тонкость: `ModifiableValue.AddModifierUnique`
+        // различает модификаторы по паре (факт, ИМЯ компонента). С null-именами два разных
+        // компонента одного факта считались бы одним и тем же, и второй бонус молча
+        // не применился бы.
+        //
+        // Имя должно быть СТАБИЛЬНЫМ между запусками: по нему сохранённые данные компонента
+        // находят свой компонент при загрузке. Поэтому не Guid.NewGuid(), как в
+        // Element.CreateInstance, а детерминированная пара "имя блюпринта + индекс".
+        // Следствие: менять ПОРЯДОК компонентов в уже вышедшем блюпринте — значит терять
+        // сохранённые данные этих компонентов (не критично, но знать стоит).
+        private static void NameElements(BlueprintScriptableObject blueprint)
+        {
+            var components = blueprint.ComponentsArray;
+            if (components == null) return;
+
+            for (var i = 0; i < components.Length; i++)
+            {
+                var component = components[i];
+                if (component == null) continue;
+
+                if (string.IsNullOrEmpty(component.name))
+                {
+                    component.name = "$" + component.GetType().Name + "$" + blueprint.name + "$" + i;
+                }
+
+                NameNested(blueprint, component, component.name);
+            }
+        }
+
+        // Обходит поля объекта и именует вложенные действия и условия (ActionList,
+        // ConditionsChecker и всё, что внутри них). Обход намеренно УЗКИЙ — только эти два
+        // контейнера и сами Element'ы: шире было бы легко уйти в граф блюпринтов и
+        // зациклиться. Элементам движок сам раздаёт имена вида "$Тип$guid"
+        // (Element.CreateInstance), но только когда создаёт их сам; наши, собранные через
+        // new, тоже должны быть подписаны.
+        private static void NameNested(BlueprintScriptableObject blueprint, object owner, string prefix)
+        {
+            if (owner == null) return;
+
+            var fields = owner.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public
+                                                   | BindingFlags.NonPublic);
+            foreach (var field in fields)
+            {
+                var value = field.GetValue(owner);
+                if (value == null) continue;
+
+                if (value is ActionList actions)
+                {
+                    NameAll(blueprint, actions.Actions, prefix + "$" + field.Name);
+                }
+                else if (value is ConditionsChecker conditions)
+                {
+                    NameAll(blueprint, conditions.Conditions, prefix + "$" + field.Name);
+                }
+            }
+        }
+
+        private static void NameAll(BlueprintScriptableObject blueprint, Element[] elements, string prefix)
+        {
+            if (elements == null) return;
+
+            for (var i = 0; i < elements.Length; i++)
+            {
+                var element = elements[i];
+                if (element == null) continue;
+
+                if (string.IsNullOrEmpty(element.name))
+                {
+                    element.name = "$" + element.GetType().Name + "$" + prefix + "$" + i;
+                }
+
+                // Регистрируем элемент в блюпринте — ровно то, что при чтении .jbp делает
+                // Element.OnDeserialized (Json.BlueprintBeingRead.Data.AddToElementsList).
+                // Помимо самого списка это проставляет элементу Owner, а он нужен: метод
+                // Element.LogError читает Owner.name БЕЗ проверки на null, и у наших
+                // действий любая жалоба на неверные данные превращалась бы в
+                // NullReferenceException вместо внятной строки в логе.
+                if (element.Owner == null) blueprint.AddToElementsList(element);
+
+                // Внутри действия может лежать ещё один ActionList (Conditional, проверка
+                // навыка с ветками Success/Failure) — спускаемся дальше.
+                NameNested(blueprint, element, element.name);
+            }
         }
 
     }
