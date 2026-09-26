@@ -12,7 +12,7 @@ using Kingmaker.Utility;
 
 namespace SingingBlade
 {
-    internal static partial class CutTheSkies
+    internal static partial class ReachForStars
     {
         // ----------------------------------------------------------------
         // Доставка заклинания попаданием клинка
@@ -66,7 +66,7 @@ namespace SingingBlade
             catch (Exception e)
             {
                 Clear();
-                Main.LogError("CutTheSkies.OnWeaponAttackResolved", e);
+                Main.LogError("ReachForStars.OnWeaponAttackResolved", e);
             }
         }
 

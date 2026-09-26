@@ -89,7 +89,7 @@ namespace SingingBlade
         private static bool OnToggle(UnityModManager.ModEntry modEntry, bool value)
         {
             Enabled = value;
-            CutTheSkies.OnModToggled(value);
+            ReachForStars.OnModToggled(value);
             return true;
         }
 

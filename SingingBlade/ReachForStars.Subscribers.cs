@@ -14,7 +14,7 @@ namespace SingingBlade
     // Подписчик на правило атаки оружием. Отдельным классом, а не патчем на
     // MagusController: движок сам рассылает событие всем подписчикам, патчить
     // чужой метод незачем — меньше шансов подраться с другими модами.
-    internal class CutTheSkiesDelivery : IGlobalRulebookHandler<RuleAttackWithWeapon>
+    internal class ReachForStarsDelivery : IGlobalRulebookHandler<RuleAttackWithWeapon>
     {
         public void OnEventAboutToTrigger(RuleAttackWithWeapon evt)
         {
@@ -24,8 +24,8 @@ namespace SingingBlade
         // делом — самая дешёвая проверка: лежит ли вообще что-то "на клинке".
         public void OnEventDidTrigger(RuleAttackWithWeapon evt)
         {
-            if (!Main.Enabled || !CutTheSkies.HasSpellPending) return;
-            CutTheSkies.OnWeaponAttackResolved(evt);
+            if (!Main.Enabled || !ReachForStars.HasSpellPending) return;
+            ReachForStars.OnWeaponAttackResolved(evt);
         }
     }
 
@@ -39,12 +39,12 @@ namespace SingingBlade
     // фича, ни переключатель, и при этом в логе нет ни одного исключения мода.
     // Отлаживать четырёхзвенную цепочку вслепую дороже, чем заменить её одним звеном,
     // которое целиком наше и полностью наблюдаемое.
-    internal class CutTheSkiesGrant : IUnitEquipmentHandler, IAreaHandler
+    internal class ReachForStarsGrant : IUnitEquipmentHandler, IAreaHandler
     {
         public void HandleEquipmentSlotUpdated(ItemSlot slot, ItemEntity previousItem)
         {
             if (!Main.Enabled) return;
-            CutTheSkies.RefreshToggle(slot?.Owner?.Unit);
+            ReachForStars.RefreshToggle(slot?.Owner?.Unit);
         }
 
         // Смена экипировки при загрузке сейва события может не прислать, поэтому
@@ -56,8 +56,8 @@ namespace SingingBlade
             // Состояние сбрасываем ПЕРЕД обновлением фактов: в статиках лежит ссылка на
             // юнита из прошлой сессии (заклинание "на клинке" у персонажа, которого в этой
             // загрузке может не быть вовсе). Держать её незачем, а спутать — можно.
-            CutTheSkies.Clear();
-            CutTheSkies.RefreshParty();
+            ReachForStars.Clear();
+            ReachForStars.RefreshParty();
         }
 
         public void OnAreaBeginUnloading()
@@ -80,24 +80,24 @@ namespace SingingBlade
     // магуса подготовлен Заклинательный удар (PreparedSpellStrike / PreparedSpellCombat).
     // Наш "карман" движку не виден, поэтому ту же услугу оказываем себе сами — тем же
     // способом и в той же точке жизненного цикла.
-    internal class CutTheSkiesCommands : IUnitRunCommandHandler, IUnitCommandStartHandler, IUnitCommandEndHandler
+    internal class ReachForStarsCommands : IUnitRunCommandHandler, IUnitCommandStartHandler, IUnitCommandEndHandler
     {
         public void HandleUnitRunCommand(UnitCommand cmd)
         {
             try
             {
                 if (!(cmd is UnitAttack attack)) return;
-                if (!CutTheSkies.HasSpellOnBlade(cmd.Executor)) return;
+                if (!ReachForStars.HasSpellOnBlade(cmd.Executor)) return;
 
                 // Ровно одна атака оружием в дополнение к заклинанию — как у
                 // Заклинательного удара (и как у нашей собственной команды).
                 attack.IsSingleAttack = true;
                 attack.IgnoreCooldown();
-                Main.LogVerbose("CutTheSkies: атаке разрешён бесплатный удар (заклинание на клинке)");
+                Main.LogVerbose("ReachForStars: атаке разрешён бесплатный удар (заклинание на клинке)");
             }
             catch (Exception e)
             {
-                Main.LogError("CutTheSkies.HandleUnitRunCommand", e);
+                Main.LogError("ReachForStars.HandleUnitRunCommand", e);
             }
         }
 
@@ -121,15 +121,15 @@ namespace SingingBlade
             try
             {
                 if (cmd?.Executor != null
-                    && CutTheSkies.HoldsSingingBlade(cmd.Executor)
-                    && !CutTheSkies.HasSpellOnBlade(cmd.Executor))
+                    && ReachForStars.HoldsSingingBlade(cmd.Executor)
+                    && !ReachForStars.HasSpellOnBlade(cmd.Executor))
                 {
-                    CutTheSkies.DropExtendedReach();
+                    ReachForStars.DropExtendedReach();
                 }
             }
             catch (Exception e)
             {
-                Main.LogError("CutTheSkies.HandleUnitCommandDidEnd", e);
+                Main.LogError("ReachForStars.HandleUnitCommandDidEnd", e);
             }
         }
 
@@ -140,18 +140,18 @@ namespace SingingBlade
                 // Галку проверяем ПЕРВОЙ: без неё не надо даже трогать экипировку —
                 // событие приходит на каждую команду каждого юнита.
                 if (cmd == null || !Main.Verbose) return;
-                if (!CutTheSkies.HoldsSingingBlade(cmd.Executor)) return;
+                if (!ReachForStars.HoldsSingingBlade(cmd.Executor)) return;
 
                 var turn = Game.Instance.TurnBasedCombatController?.CurrentTurn;
-                Main.LogVerbose($"CutTheSkies: команда {cmd.GetType().Name} ({cmd.Type}) {what}: " +
+                Main.LogVerbose($"ReachForStars: команда {cmd.GetType().Name} ({cmd.Type}) {what}: " +
                          $"Result={cmd.Result}, стартовала={cmd.IsStarted}, " +
                          $"безКулдауна={cmd.IsIgnoreCooldown}, нуженПодход={cmd.ShouldUnitApproach}, " +
                          $"ходДействует={(turn != null ? turn.IsActing.ToString() : "нет хода")}, " +
-                         $"заклинаниеНаКлинке={CutTheSkies.HasSpellOnBlade(cmd.Executor)}");
+                         $"заклинаниеНаКлинке={ReachForStars.HasSpellOnBlade(cmd.Executor)}");
             }
             catch (Exception e)
             {
-                Main.LogError("CutTheSkies.Trace", e);
+                Main.LogError("ReachForStars.Trace", e);
             }
         }
     }

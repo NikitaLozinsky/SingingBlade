@@ -18,7 +18,7 @@ using Kingmaker.Visual.Particles.FxSpawnSystem;
 
 namespace SingingBlade
 {
-    internal static partial class CutTheSkies
+    internal static partial class ReachForStars
     {
         // ----------------------------------------------------------------
         // Перехват каста (вызывается из префикса на UnitUseAbility.OnAction)
@@ -44,10 +44,10 @@ namespace SingingBlade
                     // Носитель клинка кастует, а режим выключен — тоже стоит строки в логе:
                     // отличает "префикс не сработал вовсе" (строки нет совсем) от
                     // "бафф не висит" (строка есть). Кроме одного случая: сама способность
-                    // «Разрезать небеса» — на её касте баффа ещё нет по определению, он
+                    // «Дотянуться до звёзд» — на её касте баффа ещё нет по определению, он
                     // только будет наложен, и строка в логе сбивала бы с толку.
                     if (HoldsSingingBlade(caster) && !IsOwnAbility(spell))
-                        Main.Log("CutTheSkies: каст не перехвачен — режим «Разрезать небеса» " +
+                        Main.Log("ReachForStars: каст не перехвачен — режим «Дотянуться до звёзд» " +
                                  "не активен, баффа на кастере нет");
                     return false;
                 }
@@ -122,7 +122,7 @@ namespace SingingBlade
                 // уже дважды напарывались с незакрытыми партиклами).
                 attack.ClearFxOnAttack = TakeHandFx(command);
                 caster.Commands.AddToQueueFirst(attack);
-                Main.LogVerbose($"CutTheSkies: атака поставлена в очередь " +
+                Main.LogVerbose($"ReachForStars: атака поставлена в очередь " +
                          $"(в очереди {caster.Commands.Queue.Count}, " +
                          $"основное действие занято: {caster.Commands.Standard != null})");
 
@@ -134,7 +134,7 @@ namespace SingingBlade
                 // Любая неожиданность не должна ломать каст игроку — откатываемся
                 // на ванильное поведение.
                 Clear();
-                Main.LogError("CutTheSkies.TryInterceptCast", e);
+                Main.LogError("ReachForStars.TryInterceptCast", e);
                 return false;
             }
         }
@@ -163,9 +163,9 @@ namespace SingingBlade
         private static IEnumerable<BlueprintAbility> ModeAbilities()
         {
             if (_modeAbilityMagus == null)
-                _modeAbilityMagus = ResourcesLibrary.TryGetBlueprint<BlueprintAbility>(Guids.CutTheSkiesAbilityGuid);
+                _modeAbilityMagus = ResourcesLibrary.TryGetBlueprint<BlueprintAbility>(Guids.ReachForStarsAbilityGuid);
             if (_modeAbilityEldritch == null)
-                _modeAbilityEldritch = ResourcesLibrary.TryGetBlueprint<BlueprintAbility>(Guids.CutTheSkiesAbilityEldritchGuid);
+                _modeAbilityEldritch = ResourcesLibrary.TryGetBlueprint<BlueprintAbility>(Guids.ReachForStarsAbilityEldritchGuid);
 
             yield return _modeAbilityMagus;
             yield return _modeAbilityEldritch;
@@ -181,7 +181,7 @@ namespace SingingBlade
         // действительно включил режим и чего-то ждал.
         private static bool Decline(string reason)
         {
-            Main.Log("CutTheSkies: заклинание НЕ проведено через клинок — " + reason);
+            Main.Log("ReachForStars: заклинание НЕ проведено через клинок — " + reason);
             return false;
         }
 
@@ -238,7 +238,7 @@ namespace SingingBlade
                 {
                     var bp = ResourcesLibrary.TryGetBlueprint<BlueprintAbility>(guid);
                     if (bp != null) _extraDeliverable.Add(bp);
-                    else Main.Log("CutTheSkies: в списке разрешённых способностей не найден блюпринт " + guid);
+                    else Main.Log("ReachForStars: в списке разрешённых способностей не найден блюпринт " + guid);
                 }
             }
 

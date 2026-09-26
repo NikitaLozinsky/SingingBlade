@@ -78,13 +78,16 @@ namespace SingingBlade
             var songArea = BuildSongArea();
             var songAureole = BuildSongAureole();
             var sungThisRoundFlag = BuildSungThisRoundFlag();
-            var cutTheSkiesBuff = BuildCutTheSkiesBuff();
+            var reachForStarsBuff = BuildReachForStarsBuff();
             var reachStretchBuff = BuildReachStretchBuff();
-            var cutTheSkiesAbility = BuildCutTheSkiesAbility(
-                Guids.CutTheSkiesAbilityGuid, Guids.ArcanePoolResource,
+            // Имена блюпринтов способности — прежние, с CutTheSkies, и так и останутся:
+            // это ключи для имён компонентов в сейве, а не то, что видит игрок
+            // (подробно — у BuildReachForStarsBuff).
+            var reachForStarsAbility = BuildReachForStarsAbility(
+                Guids.ReachForStarsAbilityGuid, Guids.ArcanePoolResource,
                 "SingingBladeCutTheSkiesAbility");
-            var cutTheSkiesAbilityEldritch = BuildCutTheSkiesAbility(
-                Guids.CutTheSkiesAbilityEldritchGuid, Guids.EldritchPoolResource,
+            var reachForStarsAbilityEldritch = BuildReachForStarsAbility(
+                Guids.ReachForStarsAbilityEldritchGuid, Guids.EldritchPoolResource,
                 "SingingBladeCutTheSkiesAbilityEldritch");
             var ability = BuildAbility();
             var stormEnchantment = BuildStormEnchantment();
@@ -98,14 +101,14 @@ namespace SingingBlade
             Register(songArea);
             Register(songAureole);
             Register(sungThisRoundFlag);
-            Register(cutTheSkiesBuff);
+            Register(reachForStarsBuff);
             Register(reachStretchBuff);
             // ОБА варианта способности регистрируются всегда — под резерв Магуса и под
             // резерв Наследника. Ровно этой строки когда-то и не хватало: блюпринт
-            // собирался методом BuildCutTheSkiesAbility, но в кэш не попадал, выдача
+            // собирался методом BuildReachForStarsAbility, но в кэш не попадал, выдача
             // молча не состоялась, и в Player.log не было ни одной строки мода.
-            Register(cutTheSkiesAbility);
-            Register(cutTheSkiesAbilityEldritch);
+            Register(reachForStarsAbility);
+            Register(reachForStarsAbilityEldritch);
             Register(ability);
             // Порядок внутри Register не важен (ссылки резолвятся лениво, по GUID), но
             // зарегистрированы должны быть ВСЕ три: фича носителя ссылается на фичу Айву,

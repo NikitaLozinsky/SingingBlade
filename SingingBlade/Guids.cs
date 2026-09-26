@@ -28,7 +28,9 @@ namespace SingingBlade
 
         // Существующие блюпринты игры, на которые мы ссылаемся, не создавая заново.
         public const string ScimitarWeaponType = "d9fbec4637d71bd4ebc977628de3daf3";
-        public const string Enhancement4Enchantment = "783d7d496da6ac44f9511011fc5f1979";
+        // Ванильное +5 (Weapons/Enchantments/Enhancement5.jbp, WeaponEnhancementBonus = 5).
+        // До 2026-09-26 клинок был +4 (Enhancement4, 783d7d496da6ac44f9511011fc5f1979).
+        public const string Enhancement5Enchantment = "bdba267e951851449af552aa9f9e3992";
 
         // Модель "Несущего веру" (уникальный скимитар) — переиспользуем её визуал
         // для Поющего клинка вместо дефолтной модели базового типа Scimitar.
@@ -59,14 +61,14 @@ namespace SingingBlade
         // самого исполнителя (toCaster): ровно одно кольцо, и штатная очистка баффом.
         public const string InspireCourageAreaFx = "2f93a2909cb766f4d961aee34a3c84c2";
 
-        // --- «Разрезать небеса»: проведение лучевых заклинаний через удар клинком ---
+        // --- «Дотянуться до звёзд»: проведение лучевых заклинаний через удар клинком ---
         // БОЛЬШЕ НЕ ИСПОЛЬЗУЕТСЯ. Была скрытой фичей-переносчиком в штатной цепочке
         // "зачарование -> AddUnitFeatureEquipment -> фича -> AddFacts -> переключатель".
         // Цепочка рвалась молча (компоненты на блюпринте есть, до персонажа не доезжает
         // ничего, в логе ни одного исключения), поэтому заменена прямой выдачей из кода —
-        // см. CutTheSkiesGrant. Блюпринт с этим GUID больше не создаётся; сам GUID
+        // см. ReachForStarsGrant. Блюпринт с этим GUID больше не создаётся; сам GUID
         // НЕ переиспользовать под другое, чтобы не путать историю сессий.
-        public const string CutTheSkiesFeatureGuid = "bf4bc6de66d24b339410d508379c2d9a";
+        public const string ReachForStarsFeatureGuid = "bf4bc6de66d24b339410d508379c2d9a";
         // ОТРАБОТАННЫЙ GUID. Был активируемым переключателем старой схемы
         // «подбежать и ударить» (флаг RangedStrike = false). Схема удалена целиком
         // 2026-09-23: режим дистанционного удара работает и делает её ненужной, а
@@ -74,17 +76,17 @@ namespace SingingBlade
         // GUID больше не создаётся; сам GUID НЕ переиспользовать под другое.
         // Разбор трёх слоёв пошаговой механики, на которых та схема ломалась, сохранён
         // в CLAUDE.md — он полезен сам по себе, независимо от удалённого кода.
-        // public const string CutTheSkiesToggleGuid = "66a55d4b4da64eb9879ef66cca96d6a5";
+        // public const string ReachForStarsToggleGuid = "66a55d4b4da64eb9879ef66cca96d6a5";
         // Бафф "переключатель включён" — обязательное поле m_Buff у активируемой способности,
         // заодно по нему код проверяет, включён ли режим.
-        public const string CutTheSkiesBuffGuid = "aec52e83d3404b649be6446df6e9867c";
+        public const string ReachForStarsBuffGuid = "aec52e83d3404b649be6446df6e9867c";
 
-        // Активируемая способность «Разрезать небеса» в режиме ДИСТАНЦИОННОГО УДАРА
-        // (CutTheSkies.RangedStrike): быстрое действие, тратит очко Мистического
-        // резерва, вешает на исполнителя CutTheSkiesBuff. Новый GUID, сгенерирован
+        // Активируемая способность «Дотянуться до звёзд» в режиме ДИСТАНЦИОННОГО УДАРА
+        // (ReachForStars.RangedStrike): быстрое действие, тратит очко Мистического
+        // резерва, вешает на исполнителя ReachForStarsBuff. Новый GUID, сгенерирован
         // 2026-09-21, проверен на отсутствие коллизий с остальными GUID мода.
         // В режиме переключателя (старая схема) НЕ используется.
-        public const string CutTheSkiesAbilityGuid = "001d4da034f243508388779003d19645";
+        public const string ReachForStarsAbilityGuid = "001d4da034f243508388779003d19645";
 
         // ТО ЖЕ САМОЕ, но с платой из резерва Чародейского наследника.
         //
@@ -92,10 +94,10 @@ namespace SingingBlade
         // m_RequiredResource, а у Магуса и у Наследника резервы — РАЗНЫЕ блюпринты
         // (см. ArcanePoolResource / EldritchPoolResource ниже). Ваниль решает это так же —
         // дублированием способности под каждый резерв (ArcaneWeaponSwitchAbility против
-        // EldritchWeaponSwitchAbility). Какой из двух выдать, решает CutTheSkies
+        // EldritchWeaponSwitchAbility). Какой из двух выдать, решает ReachForStars
         // .RefreshToggle по тому, какой резерв реально есть у персонажа.
         // GUID сгенерирован 2026-09-21, проверен на отсутствие коллизий.
-        public const string CutTheSkiesAbilityEldritchGuid = "01553f94337d4ad199c3ad3ea882c09d";
+        public const string ReachForStarsAbilityEldritchGuid = "01553f94337d4ad199c3ad3ea882c09d";
 
         // --- «Гроза Элизиума»: молния на крит + гром/молния на естественных атаках ---
         // Аналог ванильного CallLightningCritical (зачарование скимитара "Гнев медвежьего
@@ -132,7 +134,7 @@ namespace SingingBlade
         // условию "превратился в медведя".
         public const string AzataFirstAscensionFeature = "d2cfbbb941e07b04299b617017e369f1";
 
-        // Мистический резерв магуса (BlueprintAbilityResource) — из него способность «Разрезать небеса»
+        // Мистический резерв магуса (BlueprintAbilityResource) — из него способность «Дотянуться до звёзд»
         // берёт плату. Тот же ресурс, что тратят ванильные арканы вроде Мистической
         // точности (ArcaneAccuracyAbility, компонент AbilityResourceLogic).
         public const string ArcanePoolResource = "effc3e386331f864e9e06d19dc218b37";
@@ -173,7 +175,7 @@ namespace SingingBlade
         // Supernatural, плата из собственного ресурса. Но по механике это настоящий луч
         // (AbilityDeliverProjectile -> RayItem -> RayType, AttackType = RangedTouch),
         // поэтому проводится через клинок ровно так же, как Обжигающий луч.
-        // Добавлена в список CutTheSkies.ExtraDeliverableAbilities по просьбе
+        // Добавлена в список ReachForStars.ExtraDeliverableAbilities по просьбе
         // пользователя 2026-09-22.
         public const string AzataFirstAscensionAbility = "5d5f0c9b274bab44eb01272c8fcf251d";
 
@@ -189,7 +191,7 @@ namespace SingingBlade
         public const string SpellStrikeBuff = "06e0c9887eb1724409977dac7168bfd7";
 
         // Сами способности Магуса (не баффы) — берём иконку "Удара заклинателя"
-        // для нашей способности «Разрезать небеса»: она читается игроком как родственная механика.
+        // для нашей способности «Дотянуться до звёзд»: она читается игроком как родственная механика.
         public const string SpellCombatAbility = "8898a573e8a8a184b8186dbc3a26da74";
         public const string SpellStrikeAbility = "e958891ef90f7e142a941c06c811181e";
 

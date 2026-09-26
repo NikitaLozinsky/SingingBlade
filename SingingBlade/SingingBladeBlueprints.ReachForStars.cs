@@ -38,20 +38,25 @@ namespace SingingBlade
     public static partial class SingingBladeBlueprints
     {
         // ----------------------------------------------------------------
-        // «Разрезать небеса»: переключатель проведения лучевых заклинаний через клинок
+        // «Дотянуться до звёзд»: переключатель проведения лучевых заклинаний через клинок
         // ----------------------------------------------------------------
 
         // Бафф "режим включён". Обязателен сам по себе: BlueprintActivatableAbility
         // требует непустой m_Buff. Заодно по нему рантайм-код понимает, включён ли режим
-        // (см. CutTheSkies.IsModeActive).
-        private static BlueprintBuff BuildCutTheSkiesBuff()
+        // (см. ReachForStars.IsModeActive).
+        private static BlueprintBuff BuildReachForStarsBuff()
         {
             var buff = new BlueprintBuff
             {
                 Stacking = StackingType.Replace,
                 Frequency = DurationRate.Rounds
             };
-            buff.AssetGuid = BlueprintGuid.Parse(Guids.CutTheSkiesBuffGuid);
+            buff.AssetGuid = BlueprintGuid.Parse(Guids.ReachForStarsBuffGuid);
+            // Имя СТАРОЕ намеренно, не переименовывать вслед за способностью: из него
+            // NameElements собирает имена компонентов, а по ним сейв находит данные
+            // компонентов. Сохранились в раунд действия баффа, сменили имя — и AddStatBonus
+            // при загрузке теряет свои данные, а его +23 к Reach остаётся на стате навсегда
+            // (EntityFact.PostLoadComponents: "can't find source component" -> Dispose).
             buff.name = "SingingBladeCutTheSkiesBuff";
 
             // ВСЯ механика дистанционного удара — вот этот один компонент, и до
@@ -79,15 +84,15 @@ namespace SingingBlade
                 {
                     Descriptor = ModifierDescriptor.UntypedStackable,
                     Stat = StatType.Reach,
-                    Value = CutTheSkies.ReachBonusFeet,
+                    Value = ReachForStars.ReachBonusFeet,
                     ScaleByBasicAttackBonus = false
                 }
             };
 
-            Reflect.Set(buff, "m_DisplayName", SingingBladeLocalization.CreateString(L.CutTheSkiesName));
-            Reflect.Set(buff, "m_Description", SingingBladeLocalization.CreateString(L.CutTheSkiesDescription));
+            Reflect.Set(buff, "m_DisplayName", SingingBladeLocalization.CreateString(L.ReachForStarsName));
+            Reflect.Set(buff, "m_Description", SingingBladeLocalization.CreateString(L.ReachForStarsDescription));
             Reflect.Set(buff, "m_DescriptionShort", new LocalizedString());
-            Reflect.Set(buff, "m_Icon", FactIcon(Guids.SpellStrikeAbility, ModIcons.CutTheSkies));
+            Reflect.Set(buff, "m_Icon", FactIcon(Guids.SpellStrikeAbility, ModIcons.ReachForStars));
 
             // Оба PrefabLink обязаны быть не null — иначе Buff.OnRemove() падает и
             // иконка баффа навсегда залипает в панели (подробный разбор в BuildSongBuff).
@@ -99,7 +104,7 @@ namespace SingingBlade
         }
 
         // Скрытый бафф-«растяжка»: дотягивает досягаемость клинка до конкретной цели,
-        // когда заклинание уходит дальше обычного удара (см. CutTheSkies.TryReachTarget).
+        // когда заклинание уходит дальше обычного удара (см. ReachForStars.TryReachTarget).
         //
         // Величина добавки переменная, а Value у AddStatBonus — поле блюпринта, одно на всех.
         // Поэтому величина задаётся РАНГОМ баффа: AddStatBonus.OnTurnOn считает
@@ -133,10 +138,10 @@ namespace SingingBlade
                 }
             };
 
-            Reflect.Set(buff, "m_DisplayName", SingingBladeLocalization.CreateString(L.CutTheSkiesName));
-            Reflect.Set(buff, "m_Description", SingingBladeLocalization.CreateString(L.CutTheSkiesDescription));
+            Reflect.Set(buff, "m_DisplayName", SingingBladeLocalization.CreateString(L.ReachForStarsName));
+            Reflect.Set(buff, "m_Description", SingingBladeLocalization.CreateString(L.ReachForStarsDescription));
             Reflect.Set(buff, "m_DescriptionShort", new LocalizedString());
-            Reflect.Set(buff, "m_Icon", FactIcon(Guids.SpellStrikeAbility, ModIcons.CutTheSkies));
+            Reflect.Set(buff, "m_Icon", FactIcon(Guids.SpellStrikeAbility, ModIcons.ReachForStars));
 
             // Служебный бафф — в панели ему делать нечего.
             Reflect.SetEnum(buff, "m_Flags", 2); // BlueprintBuff.Flags.HiddenInUi
@@ -153,7 +158,7 @@ namespace SingingBlade
         // смысла нет; к тому же Ranks у баффа — это верхняя граница ранга.
         public const int MaxReachStretchFeet = 120;
 
-        // Способность «Разрезать небеса»: быстрое действие, стоит одно очко Мистического
+        // Способность «Дотянуться до звёзд»: быстрое действие, стоит одно очко Мистического
         // резерва, на один раунд вешает на магуса бафф режима.
         //
         // Форма скопирована с ванильной магусовской арканы "Мистическая точность"
@@ -171,8 +176,8 @@ namespace SingingBlade
         // счётчик на кнопке показывал 0, а игра на нажатие отвечала "нет ресурсов".
         // Ваниль в этом месте делает ровно то же самое, что и мы: дублирует способность
         // под каждый резерв (ArcaneWeaponSwitchAbility / EldritchWeaponSwitchAbility).
-        // Кому какой вариант выдать, решает CutTheSkies.RefreshToggle.
-        private static BlueprintAbility BuildCutTheSkiesAbility(string abilityGuid, string resourceGuid, string name)
+        // Кому какой вариант выдать, решает ReachForStars.RefreshToggle.
+        private static BlueprintAbility BuildReachForStarsAbility(string abilityGuid, string resourceGuid, string name)
         {
             var ability = new BlueprintAbility
             {
@@ -204,10 +209,10 @@ namespace SingingBlade
             ability.AssetGuid = BlueprintGuid.Parse(abilityGuid);
             ability.name = name;
 
-            Reflect.Set(ability, "m_DisplayName", SingingBladeLocalization.CreateString(L.CutTheSkiesName));
-            Reflect.Set(ability, "m_Description", SingingBladeLocalization.CreateString(L.CutTheSkiesDescription));
+            Reflect.Set(ability, "m_DisplayName", SingingBladeLocalization.CreateString(L.ReachForStarsName));
+            Reflect.Set(ability, "m_Description", SingingBladeLocalization.CreateString(L.ReachForStarsDescription));
             Reflect.Set(ability, "m_DescriptionShort", new LocalizedString());
-            Reflect.Set(ability, "m_Icon", FactIcon(Guids.SpellStrikeAbility, ModIcons.CutTheSkies));
+            Reflect.Set(ability, "m_Icon", FactIcon(Guids.SpellStrikeAbility, ModIcons.ReachForStars));
 
             // Эта способность, в отличие от "Голоса клинка", ВИДНА игроку, поэтому пустые
             // (не null!) LocalizedString здесь обязательны: иначе в тултипе в строках
@@ -221,8 +226,8 @@ namespace SingingBlade
                 {
                     Actions = new GameAction[]
                     {
-                        ApplyBuff(Guids.CutTheSkiesBuffGuid, toCaster: true,
-                                  seconds: CutTheSkies.ModeDurationSeconds)
+                        ApplyBuff(Guids.ReachForStarsBuffGuid, toCaster: true,
+                                  seconds: ReachForStars.ModeDurationSeconds)
                     }
                 }
             };

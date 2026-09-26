@@ -21,13 +21,13 @@ namespace SingingBlade
         // переиспользует иконку и модель ванильного "Несущего веру" (см. BuildItem).
         public const string Song = "BladeSong.png";
 
-        // Способность «Разрезать небеса» и её бафф. Крылатый клинок в молниях — по
+        // Способность «Дотянуться до звёзд» и её бафф. Крылатый клинок в молниях — по
         // образу из истории клинка: заклинание, пойманное на лету и вогнанное остриём.
         // Запасные, сейчас не используются: SustainedNote.png и SustainedNoteAlt.png
         // (иконки прежнего названия "Долгая нота"), BladeSongChoir.png, SpellOnEdge.png,
         // BladeReticle.png. Имена файлов НЕ переименовывались вместе с кодом — это
         // просто картинки в Assets.
-        public const string CutTheSkies = "FlySword.png";
+        public const string ReachForStars = "FlySword.png";
 
         private static readonly Dictionary<string, Sprite> Cache = new Dictionary<string, Sprite>();
 

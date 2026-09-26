@@ -9,13 +9,15 @@ using Kingmaker.UnitLogic.Buffs.Blueprints;
 
 namespace SingingBlade
 {
-    // «Разрезать небеса» — проведение заклинаний с дистанционной атакой касанием
+    // «Дотянуться до звёзд» — проведение заклинаний с дистанционной атакой касанием
     // (Scorching Ray, Snowball и т.п.) через удар клинком ближнего боя.
     //
-    // Название взято из истории клинка: «Разрезать небеса» кричала Ирвен через палубу
-    // перед тем, как поймать брошенное заклинание на клинок. Первым рабочим названием
-    // была "Долгая нота" (CutTheSkies) — если встретишь его в старых коммитах или в
-    // логах прошлых сессий, это одно и то же.
+    // Название взято из истории клинка: «Дотянуться до звёзд!» кричала Ирвен через палубу
+    // перед тем, как поймать брошенное заклинание на клинок. Заодно оно честно описывает
+    // механику: вся способность — это бонус к стату Reach, то есть клинок буквально
+    // дотягивается дальше. Прежние названия той же способности: "Долгая нота"
+    // (SustainedNote) и «Разрезать небеса» (CutTheSkies, до 2026-09-26) — если встретишь
+    // их в старых коммитах или в логах прошлых сессий, это одно и то же.
     //
     // Механика НЕ изобретена с нуля: в игре уже есть ровно она — у архетипа
     // Эльдричский лучник, только через дальнобойное оружие. Ванильная цепочка:
@@ -38,9 +40,9 @@ namespace SingingBlade
     // Перенос множителя крита отдельного патча НЕ требует: ContextActionDealDamage
     // для крита берёт либо множитель оружия, либо X2 для магусовских заклинаний —
     // у скимитара множитель и так ×2, ветки совпадают.
-    internal static partial class CutTheSkies
+    internal static partial class ReachForStars
     {
-        // Насколько «Разрезать небеса» удлиняет досягаемость клинка, в футах.
+        // Насколько «Дотянуться до звёзд» удлиняет досягаемость клинка, в футах.
         //
         // Движок считает дальность оружия как weapon.AttackRange + Stats.ReachRange, где
         // ReachRange = max(Reach - 5, 0). То есть бонус +20 к стату Reach даёт скимитару
@@ -76,28 +78,28 @@ namespace SingingBlade
         // тот же раунд.
         public const float ModeDurationSeconds = 6f;
 
-        private static CutTheSkiesDelivery _deliverySubscriber;
-        private static CutTheSkiesGrant _grantSubscriber;
-        private static CutTheSkiesCommands _commandSubscriber;
+        private static ReachForStarsDelivery _deliverySubscriber;
+        private static ReachForStarsGrant _grantSubscriber;
+        private static ReachForStarsCommands _commandSubscriber;
 
         // Вызывается один раз вместе с регистрацией блюпринтов.
         public static void Subscribe()
         {
             if (_deliverySubscriber == null)
             {
-                _deliverySubscriber = new CutTheSkiesDelivery();
+                _deliverySubscriber = new ReachForStarsDelivery();
                 EventBus.Subscribe(_deliverySubscriber);
             }
 
             if (_grantSubscriber == null)
             {
-                _grantSubscriber = new CutTheSkiesGrant();
+                _grantSubscriber = new ReachForStarsGrant();
                 EventBus.Subscribe(_grantSubscriber);
             }
 
             if (_commandSubscriber == null)
             {
-                _commandSubscriber = new CutTheSkiesCommands();
+                _commandSubscriber = new ReachForStarsCommands();
                 EventBus.Subscribe(_commandSubscriber);
             }
         }
@@ -133,20 +135,20 @@ namespace SingingBlade
                     foreach (var fact in AllGrantable()) RemoveIfPresent(unit, fact);
                     RemoveIfPresent(unit, ResourcesLibrary.TryGetBlueprint<BlueprintUnitFact>(Guids.StormFeatureGuid));
                     RemoveIfPresent(unit, ResourcesLibrary.TryGetBlueprint<BlueprintUnitFact>(Guids.StormPetFeatureGuid));
-                    RemoveIfPresent(unit, ResourcesLibrary.TryGetBlueprint<BlueprintUnitFact>(Guids.CutTheSkiesBuffGuid));
+                    RemoveIfPresent(unit, ResourcesLibrary.TryGetBlueprint<BlueprintUnitFact>(Guids.ReachForStarsBuffGuid));
                 }
 
-                Main.Log("CutTheSkies: мод выключен — выданные факты сняты с партии");
+                Main.Log("ReachForStars: мод выключен — выданные факты сняты с партии");
             }
             catch (Exception e)
             {
-                Main.LogError("CutTheSkies.OnModToggled", e);
+                Main.LogError("ReachForStars.OnModToggled", e);
             }
         }
 
         private static void RemoveIfPresent(UnitEntityData unit, BlueprintUnitFact fact)
         {
-            if (fact != null && unit.Descriptor.HasFact(fact)) unit.Descriptor.RemoveFact(fact);
+            if (HasUsableFact(unit, fact)) unit.Descriptor.RemoveFact(fact);
         }
 
         // ----------------------------------------------------------------
@@ -163,7 +165,7 @@ namespace SingingBlade
         public static bool IsModeActive(UnitEntityData caster)
         {
             if (caster == null) return false;
-            return HasFact(caster, ref _modeBuff, Guids.CutTheSkiesBuffGuid);
+            return HasFact(caster, ref _modeBuff, Guids.ReachForStarsBuffGuid);
         }
 
         // Блюпринты кэшируем: этот путь дёргается на КАЖДОЕ применение способности

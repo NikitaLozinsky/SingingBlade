@@ -12,7 +12,7 @@ using Kingmaker.Utility;
 
 namespace SingingBlade
 {
-    internal static partial class CutTheSkies
+    internal static partial class ReachForStars
     {
         // ----------------------------------------------------------------
         // Досягаемость под дальность заклинания
@@ -94,7 +94,7 @@ namespace SingingBlade
             buff.SetRank(extraFeet);
 
             Main.Log(string.Format(
-                "CutTheSkies: досягаемость дотянута на +{0} футов под дальность заклинания " +
+                "ReachForStars: досягаемость дотянута на +{0} футов под дальность заклинания " +
                 "(до цели {1:0.#} футов, обычный удар достаёт на {2:0.#}, заклинание — на {3:0.#})",
                 extraFeet, distance / Feet.FeetToMetersRatio, radius / Feet.FeetToMetersRatio,
                 spellReach / Feet.FeetToMetersRatio));
@@ -129,7 +129,7 @@ namespace SingingBlade
             }
             catch (Exception e)
             {
-                Main.LogError("CutTheSkies.DropExtendedReach", e);
+                Main.LogError("ReachForStars.DropExtendedReach", e);
             }
         }
 
@@ -144,7 +144,7 @@ namespace SingingBlade
         //
         // Зачем: движок считает зону угрозы (внеочередные атаки, сцепка в ближнем бою) от
         // той же дальности оружия, что и сам удар — UnitHelper.GetThreatRange возвращает
-        // hand.Weapon.AttackRange.Meters. Без этого магус с активной способностью «Разрезать небеса» начал бы
+        // hand.Weapon.AttackRange.Meters. Без этого магус с активной способностью «Дотянуться до звёзд» начал бы
         // угрожать и бить внеочередными атаками на всю дистанцию удара, а враги считались
         // бы с ним в ближнем бою через полполя. Пользователь просил зону не раздувать,
         // поэтому дальность УДАРА растёт, а зона УГРОЗЫ остаётся ванильной.

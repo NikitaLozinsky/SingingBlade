@@ -47,12 +47,12 @@ namespace SingingBlade
             }
 
             // Подписки боевого конвейера включаем только если блюпринты собрались:
-            // без них способности «Разрезать небеса» всё равно не на что ссылаться.
-            CutTheSkies.Subscribe();
+            // без них способности «Дотянуться до звёзд» всё равно не на что ссылаться.
+            ReachForStars.Subscribe();
         }
     }
 
-    // «Разрезать небеса»: перехват каста лучевого заклинания, чтобы вместо дальнобойной
+    // «Дотянуться до звёзд»: перехват каста лучевого заклинания, чтобы вместо дальнобойной
     // атаки касанием персонаж ударил клинком, а заклинание ушло вместе с ударом.
     // Точка та же, что использует ванильный Эльдричский лучник (там этот код стоит
     // прямо в теле OnAction и требует firstWeapon.Blueprint.IsRanged).
@@ -66,13 +66,13 @@ namespace SingingBlade
         public static bool Prefix(UnitUseAbility __instance, ref UnitCommand.ResultType __result)
         {
             if (!Main.Enabled) return true;
-            return !CutTheSkies.TryInterceptCast(__instance, ref __result);
+            return !ReachForStars.TryInterceptCast(__instance, ref __result);
         }
     }
 
     // Зона угрозы (внеочередные атаки и сцепка в ближнем бою) считается от той же
     // дальности оружия, что и сам удар: UnitHelper.GetThreatRange возвращает
-    // hand.Weapon.AttackRange.Meters, а наша способность «Разрезать небеса» эту дальность как раз и
+    // hand.Weapon.AttackRange.Meters, а наша способность «Дотянуться до звёзд» эту дальность как раз и
     // удлиняет бонусом к стату Reach. Без этого патча магус угрожал бы и бил
     // внеочередными атаками на всю дистанцию дистанционного удара — пользователь
     // просил зону не раздувать, поэтому здесь мы вычитаем ровно свой вклад обратно.
@@ -96,7 +96,7 @@ namespace SingingBlade
 
             try
             {
-                CutTheSkies.TrimThreatRange(unit, ref __result);
+                ReachForStars.TrimThreatRange(unit, ref __result);
             }
             catch (Exception e)
             {

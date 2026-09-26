@@ -16,15 +16,24 @@ namespace SingingBlade
 {
     // Диагностика состояния мода по кнопке в окне настроек UMM.
     //
-    // Появилась потому, что переключатель «Разрезать небеса» не доехал до панели
+    // Появилась потому, что переключатель «Дотянуться до звёзд» не доехал до панели
     // способностей, при этом в логах не было НИ ОДНОГО исключения нашего мода —
     // то есть цепочка выдачи рвалась молча. Именно этот отчёт и показал, что
     // блюпринты зарегистрированы и оба компонента на зачаровании есть, а до
     // персонажа не доезжает ничего: после этого штатная цепочка блюпринтов была
-    // заменена на прямую выдачу из кода (CutTheSkiesGrant).
+    // заменена на прямую выдачу из кода (ReachForStarsGrant).
     internal static class SingingBladeDiagnostics
     {
+        // Отчёт показывается в окне UMM и ДУБЛИРУЕТСЯ в лог: раньше он жил только в окне,
+        // и когда игрок присылал логи, в них не было ни строчки из того, что он видел.
         public static string Report()
+        {
+            var report = BuildReport();
+            Main.Log("Диагностика:\n" + report);
+            return report;
+        }
+
+        private static string BuildReport()
         {
             if (Game.Instance?.Player == null)
             {
@@ -34,7 +43,7 @@ namespace SingingBlade
             // Заодно приводим факт-переключатель в соответствие с экипировкой: если
             // DLL обновили посреди сессии, событие смены экипировки уже не придёт,
             // а перезагружать игру ради этого незачем.
-            CutTheSkies.RefreshParty();
+            ReachForStars.RefreshParty();
 
             var sb = new StringBuilder();
             sb.AppendLine("(выданные факты синхронизированы с экипировкой)");
@@ -47,9 +56,9 @@ namespace SingingBlade
             // молча не состоялась, а отчёт об этом не говорил ничего.
             sb.AppendLine("Блюпринты:");
             sb.AppendLine("  предмет: " + Found<BlueprintItemWeapon>(Guids.ItemGuid));
-            sb.AppendLine("  способность (резерв Магуса): " + Found<BlueprintAbility>(Guids.CutTheSkiesAbilityGuid));
-            sb.AppendLine("  способность (резерв Наследника): " + Found<BlueprintAbility>(Guids.CutTheSkiesAbilityEldritchGuid));
-            sb.AppendLine("  бафф режима: " + Found<BlueprintBuff>(Guids.CutTheSkiesBuffGuid));
+            sb.AppendLine("  способность (резерв Магуса): " + Found<BlueprintAbility>(Guids.ReachForStarsAbilityGuid));
+            sb.AppendLine("  способность (резерв Наследника): " + Found<BlueprintAbility>(Guids.ReachForStarsAbilityEldritchGuid));
+            sb.AppendLine("  бафф режима: " + Found<BlueprintBuff>(Guids.ReachForStarsBuffGuid));
             sb.AppendLine("  бафф ауреоли: " + Found<BlueprintBuff>(Guids.SongAureoleGuid));
             sb.AppendLine("  бафф растяжки досягаемости: " + Found<BlueprintBuff>(Guids.ReachStretchBuffGuid));
 
@@ -96,12 +105,16 @@ namespace SingingBlade
             //
             // Печатаем ОБА варианта способности: так видно и то, что выдалось, и то, что
             // осталось от прошлой сборки, если резерв персонажа определился иначе.
-            var abilityMagus = ResourcesLibrary.TryGetBlueprint<BlueprintAbility>(Guids.CutTheSkiesAbilityGuid);
-            var abilityEldritch = ResourcesLibrary.TryGetBlueprint<BlueprintAbility>(Guids.CutTheSkiesAbilityEldritchGuid);
-            sb.AppendLine("  способность как факт (вариант Магуса): " +
-                          YesNo(abilityMagus != null && wielder.Descriptor.HasFact(abilityMagus)));
-            sb.AppendLine("  способность как факт (вариант Наследника): " +
-                          YesNo(abilityEldritch != null && wielder.Descriptor.HasFact(abilityEldritch)));
+            var abilityMagus = ResourcesLibrary.TryGetBlueprint<BlueprintAbility>(Guids.ReachForStarsAbilityGuid);
+            var abilityEldritch = ResourcesLibrary.TryGetBlueprint<BlueprintAbility>(Guids.ReachForStarsAbilityEldritchGuid);
+            sb.AppendLine("  способность (вариант Магуса): " + AbilityState(wielder, abilityMagus));
+            sb.AppendLine("  способность (вариант Наследника): " + AbilityState(wielder, abilityEldritch));
+
+            // Какой вариант положен, решает резерв. Метод AppendResource был написан ровно
+            // для этого, но в отчёт так и не попал — выбор варианта снаружи было не проверить.
+            sb.AppendLine("Мистический резерв:");
+            AppendResource(sb, wielder, Guids.ArcanePoolResource, "резерв Магуса");
+            AppendResource(sb, wielder, Guids.EldritchPoolResource, "резерв Наследника");
 
             var inAbilityList = wielder.Descriptor.Abilities?.Enumerable
                 ?.Any(a => a.Blueprint == abilityMagus || a.Blueprint == abilityEldritch) == true;
@@ -143,7 +156,7 @@ namespace SingingBlade
             // "песнь не звучит".
             sb.AppendLine();
             sb.AppendLine("Песнь сейчас звучит на носителе: " + YesNo(HasBuff(wielder, Guids.SongAureoleGuid)));
-            sb.AppendLine("Режим «Разрезать небеса» активен: " + YesNo(CutTheSkies.IsModeActive(wielder)));
+            sb.AppendLine("Режим «Дотянуться до звёзд» активен: " + YesNo(ReachForStars.IsModeActive(wielder)));
 
             // 6. Наши баффы с остатком времени. Нужно для разбора случая "крит был,
             // а песня не продлилась": единственное, что может не дать песне зазвучать
@@ -156,7 +169,7 @@ namespace SingingBlade
             AppendBuff(sb, wielder, Guids.SongBuffGuid, "Песнь клинка");
             AppendBuff(sb, wielder, Guids.SongBuffEmpoweredGuid, "Песнь клинка (усиленная)");
             AppendBuff(sb, wielder, Guids.SongAureoleGuid, "ауреоль");
-            AppendBuff(sb, wielder, Guids.CutTheSkiesBuffGuid, "режим «Разрезать небеса»");
+            AppendBuff(sb, wielder, Guids.ReachForStarsBuffGuid, "режим «Дотянуться до звёзд»");
             AppendBuff(sb, wielder, Guids.ReachStretchBuffGuid, "растяжка досягаемости");
 
             // Досягаемость клинка — ГЛАВНЫЙ признак того, работает ли дистанционный удар.
@@ -184,9 +197,9 @@ namespace SingingBlade
             var guids = new[]
             {
                 Guids.ItemGuid, Guids.EnchantmentGuid, Guids.StormEnchantmentGuid,
-                Guids.AbilityGuid, Guids.CutTheSkiesAbilityGuid, Guids.CutTheSkiesAbilityEldritchGuid,
+                Guids.AbilityGuid, Guids.ReachForStarsAbilityGuid, Guids.ReachForStarsAbilityEldritchGuid,
                 Guids.SongBuffGuid, Guids.SongBuffEmpoweredGuid, Guids.SongAureoleGuid,
-                Guids.SungThisRoundFlagGuid, Guids.CutTheSkiesBuffGuid, Guids.ReachStretchBuffGuid,
+                Guids.SungThisRoundFlagGuid, Guids.ReachForStarsBuffGuid, Guids.ReachStretchBuffGuid,
                 Guids.SongAreaGuid, Guids.StormFeatureGuid, Guids.StormPetFeatureGuid
             };
 
@@ -258,6 +271,21 @@ namespace SingingBlade
         {
             var buff = ResourcesLibrary.TryGetBlueprint<BlueprintBuff>(guid);
             return buff != null && unit.Descriptor.Buffs.GetBuff(buff) != null;
+        }
+
+        // Три состояния, а не два: способность на панели быстрого доступа при снятии
+        // остаётся фактом, но отключается (TemporarilyDisabled) — см.
+        // ReachForStars.HasUsableFact. Кнопка при этом серая, и игра пишет "Недоступно".
+        private static string AbilityState(UnitEntityData unit, BlueprintAbility blueprint)
+        {
+            if (blueprint == null) return "блюпринт НЕ НАЙДЕН";
+
+            var owned = unit.Descriptor.Abilities.GetAbility(blueprint);
+            if (owned == null) return "нет";
+
+            return owned.Data.TemporarilyDisabled
+                ? "есть, но ОТКЛЮЧЕНА движком (серая кнопка, \"Недоступно\")"
+                : "есть, рабочая";
         }
 
         private static string Found<T>(string guid) where T : BlueprintScriptableObject

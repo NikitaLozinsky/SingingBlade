@@ -97,7 +97,10 @@ namespace SingingBlade
             Reflect.Set(item, "m_OverrideDamageType", false);
             Reflect.Set(item, "m_Enchantments", new[]
             {
-                Reflect.Ref<BlueprintWeaponEnchantmentReference>(Guids.Enhancement4Enchantment),
+                // Старый экземпляр предмета из сейва меняет +4 на +5 сам:
+                // ItemEntity.OnTurnOn -> ApplyEnchantments(false) снимает зачарования,
+                // которых больше нет в блюпринте, и добавляет недостающие.
+                Reflect.Ref<BlueprintWeaponEnchantmentReference>(Guids.Enhancement5Enchantment),
                 Reflect.Ref<BlueprintWeaponEnchantmentReference>(Guids.EnchantmentGuid),
                 // Наша «Гроза Элизиума»: молния в того, кого раскритовали.
                 Reflect.Ref<BlueprintWeaponEnchantmentReference>(Guids.StormEnchantmentGuid),
@@ -199,13 +202,13 @@ namespace SingingBlade
                 Action = new ActionList { Actions = new GameAction[] { onceThisRoundGuard } }
             };
 
-            // Переключатель «Разрезать небеса» здесь НЕ выдаётся, хотя штатный способ был
+            // Переключатель «Дотянуться до звёзд» здесь НЕ выдаётся, хотя штатный способ был
             // бы именно таким: AddUnitFeatureEquipment -> скрытая фича -> AddFacts.
             // Схема верная (так устроены ванильные LordProtectorEnchant и
             // ProtectionFromEvil), но у нас рвалась молча: на блюпринте зачарования
             // оба компонента присутствовали, а до персонажа не доезжала ни фича, ни
             // переключатель — и ни одного исключения мода в логе. Заменено на прямую
-            // выдачу из кода по событию смены экипировки (CutTheSkiesGrant):
+            // выдачу из кода по событию смены экипировки (ReachForStarsGrant):
             // одно звено вместо четырёх, и его состояние видно в диагностике.
 
             var enchantment = new BlueprintWeaponEnchantment();

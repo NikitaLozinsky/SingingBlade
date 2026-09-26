@@ -84,7 +84,7 @@ namespace SingingBlade
                 {
                     CriticalHit = true,
                     OnlyHit = true,
-                    Action = new ActionList { Actions = new GameAction[] { LightningUnlessSkyCut() } }
+                    Action = new ActionList { Actions = new GameAction[] { LightningUnlessReachingStars() } }
                 }
             };
 
@@ -98,7 +98,7 @@ namespace SingingBlade
         // Выдаётся НЕ через AddUnitFeatureEquipment на зачаровании, хотя штатный способ
         // именно такой: в этом моде та цепочка уже рвалась молча (см. историю с
         // переключателем в CLAUDE.md). Выдаём из кода по событию смены экипировки, тем же
-        // способом, что и способность «Разрезать небеса» — он проверен и наблюдаем.
+        // способом, что и способность «Дотянуться до звёзд» — он проверен и наблюдаем.
         private static BlueprintFeature BuildStormFeature()
         {
             var feature = BuildHiddenFeature(Guids.StormFeatureGuid, "SingingBladeStormFeature");
@@ -130,7 +130,7 @@ namespace SingingBlade
             feature.ComponentsArray = new BlueprintComponent[]
             {
                 NaturalAttackStorm(alwaysGreater: true),
-                // У Айву гейта нет: бафф «Разрезать небеса» висит на магусе, а не на ней,
+                // У Айву гейта нет: бафф «Дотянуться до звёзд» висит на магусе, а не на ней,
                 // и её собственные криты к этой способности отношения не имеют.
                 NaturalAttackLightningOnCrit(gated: false)
             };
@@ -216,7 +216,7 @@ namespace SingingBlade
         // Крит естественной атакой бьёт молнией так же, как крит клинком.
         private static AddInitiatorAttackWithWeaponTrigger NaturalAttackLightningOnCrit(bool gated)
         {
-            var action = gated ? (GameAction)LightningUnlessSkyCut() : CallLightning();
+            var action = gated ? (GameAction)LightningUnlessReachingStars() : CallLightning();
 
             return new AddInitiatorAttackWithWeaponTrigger
             {
@@ -227,7 +227,7 @@ namespace SingingBlade
             };
         }
 
-        // Молния, но только пока НЕ активна способность «Разрезать небеса».
+        // Молния, но только пока НЕ активна способность «Дотянуться до звёзд».
         //
         // Решение пользователя 2026-09-22: два эффекта на одном крите мешают друг другу —
         // когда магус ведёт заклинание через клинок, удар должен доставлять именно его,
@@ -237,15 +237,15 @@ namespace SingingBlade
         // тот переключает только ЦЕЛЬ действий (AbstractWeaponTrigger.RunActions выбирает
         // rule.Initiator или rule.Target), а MaybeCaster в контексте зачарования — всегда
         // носитель оружия, его и видит ContextConditionCasterHasFact.
-        private static Conditional LightningUnlessSkyCut()
+        private static Conditional LightningUnlessReachingStars()
         {
             return new Conditional
             {
-                Comment = "Молния не бьёт, пока небеса уже разрезаны",
+                Comment = "Молния не бьёт, пока клинок тянется к звёздам",
                 ConditionsChecker = new ConditionsChecker
                 {
                     Operation = Operation.And,
-                    Conditions = new Condition[] { CasterHasFact(Guids.CutTheSkiesBuffGuid, not: true) }
+                    Conditions = new Condition[] { CasterHasFact(Guids.ReachForStarsBuffGuid, not: true) }
                 },
                 IfTrue = new ActionList { Actions = new GameAction[] { CallLightning() } },
                 IfFalse = new ActionList()
