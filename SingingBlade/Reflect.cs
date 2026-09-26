@@ -46,11 +46,16 @@ namespace SingingBlade
             return reference;
         }
 
-        // Ставит значение приватного enum-поля, когда сам тип enum'а тоже приватный
-        // вложенный класс (например BlueprintBuff.Flags) и недоступен по имени из
-        // вызывающего кода — берём Type самого поля через рефлексию и оборачиваем
-        // rawValue через Enum.ToObject вместо прямой ссылки на тип enum'а.
-        public static void SetEnumFlag(object target, string fieldName, int rawValue)
+        // Ставит значение enum-поля по сырому int, НЕ называя тип enum'а в коде мода.
+        // Нужен в двух случаях:
+        //  1) тип enum'а приватный вложенный и по имени недоступен вовсе
+        //     (BlueprintBuff.Flags, BlueprintAbilityAreaEffect.TargetType);
+        //  2) по имени доступен ОДНОИМЁННЫЙ, но ЧУЖОЙ enum — и тогда обычный
+        //     Reflect.Set компилируется, а падает уже в рантайме, внутри
+        //     FieldInfo.SetValue ("Object of type X cannot be converted to type Y").
+        // Берём Type самого поля через рефлексию и оборачиваем rawValue через
+        // Enum.ToObject, поэтому несовпадение типов здесь невозможно в принципе.
+        public static void SetEnum(object target, string fieldName, int rawValue)
         {
             var type = target.GetType();
             FieldInfo field = null;

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using Kingmaker.Blueprints;
 using Kingmaker.Blueprints.Classes;
 using Kingmaker.Blueprints.Classes.Spells;
@@ -8,9 +9,11 @@ using Kingmaker.Blueprints.Items.Ecnchantments;
 using Kingmaker.Blueprints.Items.Weapons;
 using Kingmaker.Blueprints.JsonSystem;
 using Kingmaker.Designers.EventConditionActionSystem.Actions;
+using Kingmaker.Designers.Mechanics.EquipmentEnchants;
 using Kingmaker.Designers.Mechanics.Facts;
 using Kingmaker.ElementsSystem;
 using Kingmaker.Enums;
+using Kingmaker.Enums.Damage;
 using Kingmaker.EntitySystem.Stats;
 using Kingmaker.Items;
 using Kingmaker.Localization;
@@ -18,7 +21,11 @@ using Kingmaker.ResourceLinks;
 using Kingmaker.RuleSystem;
 using Kingmaker.UnitLogic.Abilities.Blueprints;
 using Kingmaker.UnitLogic.Abilities.Components;
+using Kingmaker.UnitLogic.Abilities.Components.AreaEffects;
+using Kingmaker.UnitLogic.ActivatableAbilities;
+using Kingmaker.UnitLogic.ActivatableAbilities.Restrictions;
 using Kingmaker.UnitLogic.Buffs.Blueprints;
+using Kingmaker.UnitLogic.Buffs.Components;
 using Kingmaker.UnitLogic.FactLogic;
 using Kingmaker.UnitLogic.Mechanics;
 using Kingmaker.UnitLogic.Mechanics.Actions;
@@ -47,508 +54,181 @@ namespace SingingBlade
     // ActionList-полей в AbilityAreaEffectRunAction и мешала баффу союзникам корректно
     // сниматься. См. историю в CLAUDE.md, если понадобится восстановить похожую механику —
     // в следующий раз стоит сразу учесть оба урока.
-    public static class SingingBladeBlueprints
+    public static partial class SingingBladeBlueprints
     {
-        // Радиус AoE вокруг атакующего, в котором ищутся союзники для песни.
-        private const float EchoRadiusFeet = 30f;
+        // Радиус зоны песни вокруг исполнителя.
+        //
+        // Ровно 50 футов, и это НЕ произвольное число: движок НЕ масштабирует Fx зоны
+        // под её Size (AreaEffectView.SpawnFxs() просто спавнит префаб как есть, а
+        // механический радиус задаётся отдельно — ScriptZoneCylinder.Radius =
+        // blueprint.Size.Meters). Кольцо InspireCourageAreaFx, которое мы одолжили,
+        // нарисовано дизайнерами под 50-футовую зону: ВСЕ ванильные зоны с этим Fx
+        // (InspireCourageArea, FakeInspireCourage, InspireTranquility,
+        // BeastTamerInspireFerocity, DLC3_InspireCourage, Aranka_Area) имеют Size = 50.
+        // При 30 футах, как было раньше, кольцо рисовалось заметно больше зоны, и
+        // союзник внутри видимого круга мог не получать бафф.
+        // Если когда-нибудь захочется другой радиус — менять вместе с Fx, иначе
+        // картинка снова разойдётся с механикой.
+        private const float SongRadiusFeet = 50f;
 
         public static void Create()
         {
             var songBuff = BuildSongBuff(Guids.SongBuffGuid, "SingingBladeSongBuff", empowered: false);
             var songBuffEmpowered = BuildSongBuff(Guids.SongBuffEmpoweredGuid, "SingingBladeSongBuffEmpowered", empowered: true);
+            var songArea = BuildSongArea();
             var songAureole = BuildSongAureole();
             var sungThisRoundFlag = BuildSungThisRoundFlag();
+            var reachForStarsBuff = BuildReachForStarsBuff();
+            var reachStretchBuff = BuildReachStretchBuff();
+            // Имена блюпринтов способности — прежние, с CutTheSkies, и так и останутся:
+            // это ключи для имён компонентов в сейве, а не то, что видит игрок
+            // (подробно — у BuildReachForStarsBuff).
+            var reachForStarsAbility = BuildReachForStarsAbility(
+                Guids.ReachForStarsAbilityGuid, Guids.ArcanePoolResource,
+                "SingingBladeCutTheSkiesAbility");
+            var reachForStarsAbilityEldritch = BuildReachForStarsAbility(
+                Guids.ReachForStarsAbilityEldritchGuid, Guids.EldritchPoolResource,
+                "SingingBladeCutTheSkiesAbilityEldritch");
             var ability = BuildAbility();
+            var stormEnchantment = BuildStormEnchantment();
+            var stormFeature = BuildStormFeature();
+            var stormPetFeature = BuildStormPetFeature();
             var enchantment = BuildEnchantment();
             var item = BuildItem();
 
             Register(songBuff);
             Register(songBuffEmpowered);
+            Register(songArea);
             Register(songAureole);
             Register(sungThisRoundFlag);
+            Register(reachForStarsBuff);
+            Register(reachStretchBuff);
+            // ОБА варианта способности регистрируются всегда — под резерв Магуса и под
+            // резерв Наследника. Ровно этой строки когда-то и не хватало: блюпринт
+            // собирался методом BuildReachForStarsAbility, но в кэш не попадал, выдача
+            // молча не состоялась, и в Player.log не было ни одной строки мода.
+            Register(reachForStarsAbility);
+            Register(reachForStarsAbilityEldritch);
             Register(ability);
+            // Порядок внутри Register не важен (ссылки резолвятся лениво, по GUID), но
+            // зарегистрированы должны быть ВСЕ три: фича носителя ссылается на фичу Айву,
+            // а зачарование висит на предмете.
+            Register(stormEnchantment);
+            Register(stormFeature);
+            Register(stormPetFeature);
             Register(enchantment);
             Register(item);
         }
 
         private static void Register(BlueprintScriptableObject blueprint)
         {
+            // Имена компонентам — ДО всего остального, см. NameElements: без них игра
+            // не может сохраниться.
+            NameElements(blueprint);
+
             // OnEnable проставляет OwnerBlueprint у компонентов — то же самое, что
             // BlueprintsCache.Load() делает для блюпринтов, прочитанных из pack-файла.
             blueprint.OnEnable();
             ResourcesLibrary.BlueprintsCache.AddCachedBlueprint(blueprint.AssetGuid, blueprint);
         }
 
-        // ----------------------------------------------------------------
-        // Предмет
-        // ----------------------------------------------------------------
-
-        private static BlueprintItemWeapon BuildItem()
+        // Раздаёт имена компонентам блюпринта и вложенным в них действиям и условиям.
+        //
+        // ЭТО НЕ КОСМЕТИКА — без имён ИГРА НЕ СОХРАНЯЕТСЯ. `EntityFact` сериализует свои
+        // компоненты словарём, ключ которого — имя компонента блюпринта:
+        //     [JsonProperty(PropertyName = "Components")]
+        //     private Dictionary<string, EntityFactComponent> ComponentsDictionary =>
+        //         Components.ToDictionary(i => i.SourceBlueprintComponentName, i => i);
+        // а `SourceBlueprintComponentName` — это ровно `component.name`. У блюпринтов из
+        // JSON имя есть всегда ("$AddInitiatorAttackWithWeaponTrigger$c1894e60-..."), а у
+        // собранных через `new` оно остаётся C#-null, и `ToDictionary` падает с
+        // "Value cannot be null. Parameter name: key". Сохранение при этом не просто
+        // ругается в лог, а ОБРЫВАЕТСЯ: игрок видит окно SAVINGERROR и не может сохраниться.
+        //
+        // Побочно имена чинят ещё одну тонкость: `ModifiableValue.AddModifierUnique`
+        // различает модификаторы по паре (факт, ИМЯ компонента). С null-именами два разных
+        // компонента одного факта считались бы одним и тем же, и второй бонус молча
+        // не применился бы.
+        //
+        // Имя должно быть СТАБИЛЬНЫМ между запусками: по нему сохранённые данные компонента
+        // находят свой компонент при загрузке. Поэтому не Guid.NewGuid(), как в
+        // Element.CreateInstance, а детерминированная пара "имя блюпринта + индекс".
+        // Следствие: менять ПОРЯДОК компонентов в уже вышедшем блюпринте — значит терять
+        // сохранённые данные этих компонентов (не критично, но знать стоит).
+        private static void NameElements(BlueprintScriptableObject blueprint)
         {
-            var item = new BlueprintItemWeapon
+            var components = blueprint.ComponentsArray;
+            if (components == null) return;
+
+            for (var i = 0; i < components.Length; i++)
             {
-                CR = 13,
-                Charges = 1,
-                SpendCharges = false,
-                RestoreChargesOnRest = false,
-                CasterLevel = 1,
-                SpellLevel = 1,
-                DC = 11,
-                IsNonRemovable = false,
-                KeepInPolymorph = false,
-                Double = false,
-                CountAsDouble = false
-            };
-            item.AssetGuid = BlueprintGuid.Parse(Guids.ItemGuid);
-            item.name = "SingingBladeItem";
+                var component = components[i];
+                if (component == null) continue;
 
-            Reflect.Set(item, "m_DisplayNameText", SingingBladeLocalization.CreateString(L.ItemName));
-            Reflect.Set(item, "m_DescriptionText", SingingBladeLocalization.CreateString(L.ItemDescription));
-            // Пустые (не null!) LocalizedString — как у ванильных предметов. Если оставить
-            // поле C#-null, implicit-конвертация LocalizedString -> string в игре возвращает
-            // буквально строку "<null>" (см. Kingmaker.Localization.LocalizedString, операторы
-            // implicit operator string), и она показывается в тултипе как есть.
-            // Большой поэтичный текст истории клинка — показывается отдельно от описания,
-            // по кнопке "Сведения" в инвентаре (как у "Жертвы Роннека" и других легендарок).
-            Reflect.Set(item, "m_FlavorText", SingingBladeLocalization.CreateString(L.ItemFlavorText));
-            Reflect.Set(item, "m_NonIdentifiedNameText", new LocalizedString());
-            Reflect.Set(item, "m_NonIdentifiedDescriptionText", new LocalizedString());
-            // Иконка не задавалась вовсе -> движок молча подставлял дефолтную иконку
-            // скимитара. Не резолвим Unity Sprite вручную по guid+fileid (для m_Icon
-            // это прямая ссылка на объект Sprite, а не строковый BlueprintReference) —
-            // проще и надёжнее одолжить уже загруженный Icon у Faith Bearer.
-            Reflect.Set(item, "m_Icon", ItemIcon(Guids.FaithBearerItem));
-            Reflect.Set(item, "m_Cost", 100000);
-            Reflect.Set(item, "m_Weight", 4.0f);
-            Reflect.Set(item, "m_Type", Reflect.Ref<BlueprintWeaponTypeReference>(Guids.ScimitarWeaponType));
-            Reflect.Set(item, "m_Size", Size.Medium);
-            Reflect.Set(item, "m_OverrideDamageDice", false);
-            Reflect.Set(item, "m_OverrideDamageType", false);
-            Reflect.Set(item, "m_Enchantments", new[]
-            {
-                Reflect.Ref<BlueprintWeaponEnchantmentReference>(Guids.Enhancement4Enchantment),
-                Reflect.Ref<BlueprintWeaponEnchantmentReference>(Guids.EnchantmentGuid)
-            });
-
-            // КРИТИЧНО: BlueprintItemWeapon.OnEnableWithLibrary() сам подставляет
-            // m_VisualParameters = new WeaponVisualParameters() если поле null, но внутри
-            // этого пустого объекта m_Projectiles остаётся C#-null (не пустой массив).
-            // RuleAttackWithWeapon.LaunchProjectiles() безусловно читает
-            // Weapon.WeaponVisualParameters.Projectiles.Length на КАЖДОЙ атаке этим оружием —
-            // и падает с NullReferenceException ДО того, как успевает создать RuleDealDamage.
-            // Именно поэтому базовый удар не наносил урон и наш крит-триггер не срабатывал:
-            // RuleAttackWithWeapon.OnTrigger падал раньше, чем очередь доходила до damage
-            // и до OnEventDidTrigger-подписчиков (см. GameLogFull.txt: "Object reference not
-            // set to an instance of an object at WeaponVisualParameters.get_Projectiles()").
-            // Задаём m_Projectiles явно пустым массивом, заодно переиспользуем модель
-            // уникального скимитара "Несущий веру" вместо дефолтной модели типа Scimitar.
-            var visualParameters = new WeaponVisualParameters();
-            Reflect.Set(visualParameters, "m_Projectiles", new BlueprintProjectileReference[0]);
-            Reflect.Set(visualParameters, "m_WeaponModel", new PrefabLink { AssetId = Guids.FaithBearerWeaponModel });
-            Reflect.Set(visualParameters, "m_WeaponSheathModelOverride", new PrefabLink { AssetId = Guids.FaithBearerWeaponSheathModel });
-            Reflect.Set(item, "m_VisualParameters", visualParameters);
-
-            return item;
-        }
-
-        // ----------------------------------------------------------------
-        // Зачарование оружия: крит-триггер (без skill-check гейта)
-        // ----------------------------------------------------------------
-
-        private static BlueprintWeaponEnchantment BuildEnchantment()
-        {
-            var castAbility = new ContextActionCastSpell();
-            Reflect.Set(castAbility, "m_Spell", Reflect.Ref<BlueprintAbilityReference>(Guids.AbilityGuid));
-
-            // Отмечаем "спели в этом раунде" ТОЛЬКО при реальном успехе песни (не на
-            // каждой попытке) — неудачная проверка Подвижности не тратит "лимит раунда",
-            // так что следующий крит в этой же серии ударов ещё может спеть успешно.
-            var markSungThisRound = ApplyBuff(Guids.SungThisRoundFlagGuid, toCaster: true);
-
-            // Кольцо-ауреоль — на самого исполнителя, ровно один раз за успешную песню.
-            // Именно здесь, а не в BuildAbility: AbilityEffectRunAction выполняется ОТДЕЛЬНО
-            // для каждой цели AoE, и наложение "на кастера" оттуда сработало бы по разу на
-            // каждого союзника в радиусе. Success-ветка проверки навыка выполняется один раз.
-            var spawnAureole = ApplyBuff(Guids.SongAureoleGuid, toCaster: true);
-
-            // Кольцо/ауреоль выступления раньше спавнилось здесь отдельным разовым
-            // ContextActionSpawnFx(InspireCourageAreaFx) — но это Fx самой
-            // InspireCourageArea, рассчитанный на ПОСТОЯННО включённую area-effect зону
-            // с собственным контроллером жизненного цикла (спавн на активации/уничтожение
-            // на ForceEnd()). Спавн "в лоб", без владеющего баффа, никем не уничтожается —
-            // эффект оставался навсегда (см. историю в CLAUDE.md). Теперь этот же Fx
-            // назначен прямо в FxOnStart у SongBuff/SongBuffEmpowered (см. BuildSongBuff) —
-            // у PrefabLink там уже есть подтверждённо рабочая очистка вместе со снятием баффа
-            // (Buff.TrySpawnParticleEffect/ClearParticleEffect), отдельный экшен тут не нужен.
-
-            // Проверка Подвижности (DC 40) — песнь звучит не на каждом крите, а только при
-            // успехе. Навык именно Подвижность, а не Убеждение: песнь рождается не из голоса,
-            // а из танца с клинком и поющего рассечённого воздуха (см. описания в
-            // Localization.json). CheckForCaster=true: триггер уже выполняется в контексте
-            // атакующего (см. ActionsOnInitiator ниже), проверяем его навык, а не цели.
-            var singChance = new ContextActionSkillCheck
-            {
-                Stat = StatType.SkillMobility,
-                CheckForCaster = true,
-                UseCustomDC = true,
-                CustomDC = 40,
-                Success = new ActionList { Actions = new GameAction[] { castAbility, markSungThisRound, spawnAureole } },
-                Failure = new ActionList()
-            };
-
-            // Не больше одной СПЕТОЙ песни за раунд, даже если в серии ударов несколько
-            // критов подряд — иначе полноценная атака могла бы наложить бафф/эхо-урон
-            // по несколько раз за один раунд.
-            var onceThisRoundGuard = new Conditional
-            {
-                Comment = "Не больше одной песни за раунд",
-                ConditionsChecker = new ConditionsChecker
+                if (string.IsNullOrEmpty(component.name))
                 {
-                    Operation = Operation.And,
-                    Conditions = new Condition[] { CasterHasFact(Guids.SungThisRoundFlagGuid, not: true) }
-                },
-                IfTrue = new ActionList { Actions = new GameAction[] { singChance } },
-                IfFalse = new ActionList()
-            };
-
-            var trigger = new AddInitiatorAttackWithWeaponTrigger
-            {
-                CriticalHit = true,
-                OnlyHit = true,
-                // По умолчанию действия триггера выполняются в контексте того, КОГО ударили —
-                // тогда область эффекта центрировалась бы на противнике, а не на Магусе. Нам нужно
-                // ровно наоборот: песнь звучит от самого атакующего.
-                ActionsOnInitiator = true,
-                Action = new ActionList { Actions = new GameAction[] { onceThisRoundGuard } }
-            };
-
-            var enchantment = new BlueprintWeaponEnchantment();
-            enchantment.AssetGuid = BlueprintGuid.Parse(Guids.EnchantmentGuid);
-            enchantment.name = "SingingBladeEnchantment";
-            Reflect.Set(enchantment, "m_EnchantmentCost", 1);
-            Reflect.Set(enchantment, "m_IdentifyDC", 5);
-            // m_EnchantName/m_Description непустые -> зачарование само становится записью
-            // в списке "Свойства" тултипа предмета (как "Святое оружие" у Faith Bearer) —
-            // с собственным именем и попап-описанием по наведению.
-            Reflect.Set(enchantment, "m_EnchantName", SingingBladeLocalization.CreateString(L.EnchantmentName));
-            Reflect.Set(enchantment, "m_Description", SingingBladeLocalization.CreateString(L.EnchantmentDescription));
-            Reflect.Set(enchantment, "m_Prefix", new LocalizedString());
-            Reflect.Set(enchantment, "m_Suffix", new LocalizedString());
-            enchantment.ComponentsArray = new BlueprintComponent[] { trigger };
-
-            return enchantment;
-        }
-
-        // ----------------------------------------------------------------
-        // Способность-эффект: AoE вокруг атакующего на крите
-        // ----------------------------------------------------------------
-
-        private static BlueprintAbility BuildAbility()
-        {
-            var ability = new BlueprintAbility
-            {
-                Type = AbilityType.Special,
-                Range = AbilityRange.Custom,
-                CustomRange = new Feet(EchoRadiusFeet),
-                CanTargetPoint = true,
-                CanTargetFriends = true,
-                CanTargetEnemies = false,
-                CanTargetSelf = true,
-                SpellResistance = false,
-                NotOffensive = false,
-                Hidden = true,
-                ActionBarAutoFillIgnored = true,
-                EffectOnAlly = AbilityEffectOnUnit.Helpful,
-                EffectOnEnemy = AbilityEffectOnUnit.Harmful,
-                ActionType = Kingmaker.UnitLogic.Commands.Base.UnitCommand.CommandType.Free
-            };
-            ability.AssetGuid = BlueprintGuid.Parse(Guids.AbilityGuid);
-            ability.name = "SingingBladeAbility";
-
-            Reflect.Set(ability, "m_DisplayName", SingingBladeLocalization.CreateString(L.AbilityName));
-            Reflect.Set(ability, "m_Description", SingingBladeLocalization.CreateString(L.AbilityDescription));
-            // Пустая (не null) — как и у m_EnchantName выше, иначе "<null>" в UI.
-            Reflect.Set(ability, "m_DescriptionShort", new LocalizedString());
-            Reflect.Set(ability, "m_Icon", FactIcon(Guids.InspireCourageToggleAbility));
-
-            // Только союзники — урона по врагам больше нет (убран по просьбе пользователя,
-            // см. комментарий в шапке файла).
-            var targetsAround = new AbilityTargetsAround();
-            Reflect.Set(targetsAround, "m_Radius", new Feet(EchoRadiusFeet));
-            Reflect.Set(targetsAround, "m_TargetType", TargetType.Ally);
-            Reflect.Set(targetsAround, "m_IncludeDead", false);
-            Reflect.Set(targetsAround, "m_Condition", new ConditionsChecker { Operation = Operation.And, Conditions = new Condition[0] });
-            Reflect.Set(targetsAround, "m_SpreadSpeed", new Feet(EchoRadiusFeet));
-
-            var spellCombatOrStrike = new ConditionsChecker
-            {
-                Operation = Operation.Or,
-                Conditions = new Condition[] { CasterHasFact(Guids.SpellCombatBuff), CasterHasFact(Guids.SpellStrikeBuff) }
-            };
-
-            // Сначала снимаем "другой" вариант песни, потом накладываем нужный — SongBuff
-            // и SongBuffEmpowered это РАЗНЫЕ блюпринты, а StackingType (хоть Replace, хоть
-            // нынешний Prolong) работает только в пределах ОДНОГО блюпринта. Без явного
-            // взаимного удаления на цели могли одновременно висеть оба (например, если в
-            // одном раунде спели без спелл-комбата, а в следующем — с ним) — внешне выглядит
-            // как "дублирующиеся" иконки песни, т.к. значок у обоих один и тот же.
-            var allyBranch = new Conditional
-            {
-                Comment = "Спелл-комбат/спеллстрайк в этом раунде -> усиленная песнь",
-                ConditionsChecker = spellCombatOrStrike,
-                IfTrue = new ActionList { Actions = new GameAction[] { RemoveBuff(Guids.SongBuffGuid), ApplyBuff(Guids.SongBuffEmpoweredGuid) } },
-                IfFalse = new ActionList { Actions = new GameAction[] { RemoveBuff(Guids.SongBuffEmpoweredGuid), ApplyBuff(Guids.SongBuffGuid) } }
-            };
-
-            var runAction = new AbilityEffectRunAction
-            {
-                Actions = new ActionList { Actions = new GameAction[] { allyBranch } }
-            };
-
-            ability.ComponentsArray = new BlueprintComponent[] { targetsAround, runAction };
-
-            return ability;
-        }
-
-        // ----------------------------------------------------------------
-        // Бафф союзникам ("Песнь клинка") — форк Inspire Courage под Магуса
-        // ----------------------------------------------------------------
-
-        private static BlueprintBuff BuildSongBuff(string guid, string name, bool empowered)
-        {
-            var buff = new BlueprintBuff
-            {
-                // Prolong, а не Replace: при новом успешном крите песня ПРОДЛЕВАЕТСЯ —
-                // движок оставляет тот же самый экземпляр Buff и просто двигает EndTime
-                // вперёд (см. BuffCollection.PrepareFactForAttach, case StackingType.Prolong:
-                // SetEndTime только если новый конец позже старого, длительность не копится).
-                // При Replace старый бафф снимался и накладывался новый — то есть каждый раунд
-                // это был отдельный цикл "снять/наложить": FxOnStart проигрывался заново
-                // (песня визуально "начиналась с нуля", а не продолжалась) и иконка в панели
-                // успевала мигнуть. Prolong убирает эту рваность.
-                Stacking = StackingType.Prolong,
-                Frequency = DurationRate.Rounds
-            };
-            buff.AssetGuid = BlueprintGuid.Parse(guid);
-            buff.name = name;
-
-            var rankTag = AbilityRankType.Default;
-
-            var components = new List<BlueprintComponent>
-            {
-                // Та же прогрессия, что и у ванильной Inspire Courage: +1 на 1 уровне,
-                // +1 каждые 6 уровней — но считаем по уровню класса Магус (и Eldritch Scion).
-                MagusLevelRank(rankTag, ContextRankProgression.StartPlusDivStep, startLevel: -1, stepLevel: 6),
-                StatBonusFromRank(ModifierDescriptor.Competence, StatType.AdditionalAttackBonus, rankTag),
-                StatBonusFromRank(ModifierDescriptor.Competence, StatType.AdditionalDamage, rankTag),
-                new SavingThrowContextBonusAgainstDescriptor
-                {
-                    SpellDescriptor = SpellDescriptor.Fear | SpellDescriptor.Charm,
-                    ModifierDescriptor = ModifierDescriptor.Morale,
-                    Value = new ContextValue { ValueType = ContextValueType.Rank, ValueRank = rankTag }
+                    component.name = "$" + component.GetType().Name + "$" + blueprint.name + "$" + i;
                 }
-            };
 
-            if (empowered)
-            {
-                // Дополнительный гарантированный +1: UntypedStackable специально не конфликтует
-                // с Competence-бонусом выше (бонусы одного типа в этом движке не суммируются,
-                // берётся только больший) — а мы хотим именно "плюс сверху", а не "выбрать большее".
-                components.Add(StatBonusFlat(ModifierDescriptor.UntypedStackable, StatType.AdditionalAttackBonus, 1));
-                components.Add(StatBonusFlat(ModifierDescriptor.UntypedStackable, StatType.AdditionalDamage, 1));
+                NameNested(blueprint, component, component.name);
             }
-
-            buff.ComponentsArray = components.ToArray();
-
-            Reflect.Set(buff, "m_DisplayName", SingingBladeLocalization.CreateString(empowered ? L.SongBuffEmpoweredName : L.SongBuffName));
-            Reflect.Set(buff, "m_Description", SingingBladeLocalization.CreateString(empowered ? L.SongBuffEmpoweredDescription : L.SongBuffDescription));
-            Reflect.Set(buff, "m_DescriptionShort", new LocalizedString());
-            Reflect.Set(buff, "m_Icon", FactIcon(Guids.InspireCourageToggleAbility));
-            // Скромная вспышка на самом получателе песни. Кольцо-ауреоль сюда вешать НЕЛЬЗЯ:
-            // FxOnStart спавнится на владельце баффа (Buff.TrySpawnParticleEffect ->
-            // FxHelper.SpawnFxOnUnit(prefab, Owner.Unit.View)), а этот бафф получает каждый
-            // союзник в радиусе — при кучном строе кольца накладывались друг на друга в
-            // "плотную" ауру. Кольцо теперь на отдельном SongAureole, только на исполнителе.
-            buff.FxOnStart = new PrefabLink { AssetId = Guids.InspireCourageBuffFx };
-            // КРИТИЧНО (причина бага с вечными и множащимися иконками в панели баффов):
-            // Buff.OnRemove() при снятии ЛЮБОГО баффа безусловно вызывает
-            // base.Blueprint.FxOnRemove.Load() — без проверки на null. У блюпринтов,
-            // прочитанных из JSON, PrefabLink всегда создан (пусть и с пустым AssetId),
-            // а мы строим блюпринт в рантайме, и поле оставалось C#-null -> NullReferenceException.
-            // Исключение ловится и ГЛОТАЕТСЯ в EntityFactsManager.DelegateOnFactWillDetach
-            // (try/catch + лог), поэтому игра не падала — но в BuffCollection.OnFactWillDetach
-            // строка EventBus.RaiseEvent(h => h.HandleBuffDidRemoved(fact)) идёт ПОСЛЕ
-            // fact.OnRemove() и уже не выполнялась. UI (UnitBuffPartVM) не получал события
-            // снятия -> BuffVM с иконкой навсегда оставалась в панели, а каждая следующая
-            // песня добавляла ещё одну. При этом модификаторы снимались нормально (они
-            // обрабатываются в OnRemove ДО падения), отсюда и "иконка висит, а эффекта нет".
-            // Пустой PrefabLink безопасен: WeakResourceLink.Load() возвращает null при пустом
-            // AssetId, а FxHelper.SpawnFxOnUnit(null, ...) отсекается проверкой `if ((bool)prefab`.
-            buff.FxOnRemove = new PrefabLink();
-            buff.ResourceAssetIds = new string[0];
-
-            return buff;
         }
 
-        // Чисто визуальный бафф-носитель кольца/ауреоли выступления. Механического эффекта
-        // нет вообще — нужен только затем, чтобы у Fx был владелец с нормальным жизненным
-        // циклом (спавн в Buff.TrySpawnParticleEffect, уничтожение в Buff.ClearParticleEffect),
-        // и чтобы этот владелец был РОВНО ОДИН — сам исполнитель (накладывается toCaster),
-        // а не каждый союзник в радиусе, как было, пока кольцо висело на SongBuff.
-        // Скрыт из UI: собственной иконки у него нет и в панели баффов ему делать нечего.
-        private static BlueprintBuff BuildSongAureole()
+        // Обходит поля объекта и именует вложенные действия и условия (ActionList,
+        // ConditionsChecker и всё, что внутри них). Обход намеренно УЗКИЙ — только эти два
+        // контейнера и сами Element'ы: шире было бы легко уйти в граф блюпринтов и
+        // зациклиться. Элементам движок сам раздаёт имена вида "$Тип$guid"
+        // (Element.CreateInstance), но только когда создаёт их сам; наши, собранные через
+        // new, тоже должны быть подписаны.
+        private static void NameNested(BlueprintScriptableObject blueprint, object owner, string prefix)
         {
-            var buff = new BlueprintBuff
+            if (owner == null) return;
+
+            var fields = owner.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public
+                                                   | BindingFlags.NonPublic);
+            foreach (var field in fields)
             {
-                // Prolong — по той же причине, что и у самой песни: продлённое выступление
-                // не должно перезапускать Fx (иначе кольцо мигало бы каждый раунд).
-                Stacking = StackingType.Prolong,
-                Frequency = DurationRate.Rounds
-            };
-            buff.AssetGuid = BlueprintGuid.Parse(Guids.SongAureoleGuid);
-            buff.name = "SingingBladeSongAureole";
-            buff.ComponentsArray = new BlueprintComponent[0];
+                var value = field.GetValue(owner);
+                if (value == null) continue;
 
-            // Пустые (не null!) LocalizedString — бафф скрыт, но правило "никаких C#-null
-            // в полях блюпринта" общее: иначе движок покажет строку "<null>", если до этих
-            // полей всё-таки кто-то доберётся (инспектор, отладочный вывод).
-            Reflect.Set(buff, "m_DisplayName", new LocalizedString());
-            Reflect.Set(buff, "m_Description", new LocalizedString());
-            Reflect.Set(buff, "m_DescriptionShort", new LocalizedString());
-            Reflect.SetEnumFlag(buff, "m_Flags", 2); // BlueprintBuff.Flags.HiddenInUi
-
-            buff.FxOnStart = new PrefabLink { AssetId = Guids.InspireCourageAreaFx };
-            buff.FxOnRemove = new PrefabLink();
-            buff.ResourceAssetIds = new string[0];
-
-            return buff;
-        }
-
-        // Служебный маркер "уже спели в этом раунде" — чистый флаг без механического
-        // эффекта, 1 раунд длительности (естественно сгорает к следующему раунду).
-        // Раньше был виден в панели баффов с той же одолженной иконкой, что и сама
-        // песня, — визуально выглядело как "дублирующиеся" иконки песни при повторных
-        // критах. Прячем через BlueprintBuff.m_Flags = Flags.HiddenInUi (значение 2):
-        // это приватный вложенный enum, поэтому ссылаемся на тип не по имени, а через
-        // Reflect.SetEnumFlag (берёт Type самого поля и оборачивает rawValue им же).
-        private static BlueprintBuff BuildSungThisRoundFlag()
-        {
-            var buff = new BlueprintBuff
-            {
-                Stacking = StackingType.Replace,
-                Frequency = DurationRate.Rounds
-            };
-            buff.AssetGuid = BlueprintGuid.Parse(Guids.SungThisRoundFlagGuid);
-            buff.name = "SingingBladeSungThisRoundFlag";
-            buff.ComponentsArray = new BlueprintComponent[0];
-
-            Reflect.Set(buff, "m_DisplayName", SingingBladeLocalization.CreateString(L.SungThisRoundFlagName));
-            Reflect.Set(buff, "m_Description", SingingBladeLocalization.CreateString(L.SungThisRoundFlagDescription));
-            Reflect.Set(buff, "m_DescriptionShort", new LocalizedString());
-            Reflect.Set(buff, "m_Icon", FactIcon(Guids.InspireCourageToggleAbility));
-            Reflect.SetEnumFlag(buff, "m_Flags", 2); // BlueprintBuff.Flags.HiddenInUi
-            // Оба PrefabLink обязаны быть НЕ null — см. подробный комментарий в BuildSongBuff.
-            // Маркер снимается каждый раунд, так что без этого он ронял Buff.OnRemove() ровно
-            // так же, как и сами баффы песни (просто без видимой иконки — он скрыт из UI).
-            buff.FxOnStart = new PrefabLink();
-            buff.FxOnRemove = new PrefabLink();
-            buff.ResourceAssetIds = new string[0];
-
-            return buff;
-        }
-
-        // ----------------------------------------------------------------
-        // Общие помощники
-        // ----------------------------------------------------------------
-
-        // ContextRankConfig, считающий уровень персонажа по классу Магус ИЛИ Eldritch Scion
-        // (в этой игре Eldritch Scion — отдельный BlueprintCharacterClass, а не архетип поверх
-        // Магуса, поэтому Archetype-фильтр не нужен: достаточно перечислить оба класса в m_Class).
-        private static ContextRankConfig MagusLevelRank(AbilityRankType tag, ContextRankProgression progression, int startLevel, int stepLevel)
-        {
-            var rank = new ContextRankConfig();
-            Reflect.Set(rank, "m_Type", tag);
-            Reflect.Set(rank, "m_BaseValueType", ContextRankBaseValueType.MaxClassLevelWithArchetype);
-            Reflect.Set(rank, "m_Progression", progression);
-            Reflect.Set(rank, "m_StartLevel", startLevel);
-            Reflect.Set(rank, "m_StepLevel", stepLevel);
-            Reflect.Set(rank, "Archetype", Reflect.Empty<BlueprintArchetypeReference>());
-            Reflect.Set(rank, "m_AdditionalArchetypes", new BlueprintArchetypeReference[0]);
-            Reflect.Set(rank, "m_Class", new[]
-            {
-                Reflect.Ref<BlueprintCharacterClassReference>(Guids.MagusClass),
-                Reflect.Ref<BlueprintCharacterClassReference>(Guids.EldritchScionClass)
-            });
-            return rank;
-        }
-
-        private static Condition CasterHasFact(string guid, bool not = false)
-        {
-            var condition = new ContextConditionCasterHasFact { Not = not };
-            Reflect.Set(condition, "m_Fact", Reflect.Ref<BlueprintUnitFactReference>(guid));
-            return condition;
-        }
-
-        private static ContextActionApplyBuff ApplyBuff(string buffGuid, bool toCaster = false)
-        {
-            var action = new ContextActionApplyBuff
-            {
-                ToCaster = toCaster,
-                AsChild = false,
-                Permanent = false,
-                UseDurationSeconds = false,
-                DurationValue = new ContextDurationValue
+                if (value is ActionList actions)
                 {
-                    Rate = DurationRate.Rounds,
-                    DiceType = DiceType.Zero,
-                    DiceCountValue = 0,
-                    BonusValue = 1
+                    NameAll(blueprint, actions.Actions, prefix + "$" + field.Name);
                 }
-            };
-            Reflect.Set(action, "m_Buff", Reflect.Ref<BlueprintBuffReference>(buffGuid));
-            return action;
+                else if (value is ConditionsChecker conditions)
+                {
+                    NameAll(blueprint, conditions.Conditions, prefix + "$" + field.Name);
+                }
+            }
         }
 
-        private static ContextActionRemoveBuff RemoveBuff(string buffGuid)
+        private static void NameAll(BlueprintScriptableObject blueprint, Element[] elements, string prefix)
         {
-            var action = new ContextActionRemoveBuff();
-            Reflect.Set(action, "m_Buff", Reflect.Ref<BlueprintBuffReference>(buffGuid));
-            return action;
-        }
+            if (elements == null) return;
 
-        private static AddContextStatBonus StatBonusFromRank(ModifierDescriptor descriptor, StatType stat, AbilityRankType rankTag)
-        {
-            return new AddContextStatBonus
+            for (var i = 0; i < elements.Length; i++)
             {
-                Descriptor = descriptor,
-                Stat = stat,
-                Multiplier = 1,
-                Value = new ContextValue { ValueType = ContextValueType.Rank, ValueRank = rankTag }
-            };
+                var element = elements[i];
+                if (element == null) continue;
+
+                if (string.IsNullOrEmpty(element.name))
+                {
+                    element.name = "$" + element.GetType().Name + "$" + prefix + "$" + i;
+                }
+
+                // Регистрируем элемент в блюпринте — ровно то, что при чтении .jbp делает
+                // Element.OnDeserialized (Json.BlueprintBeingRead.Data.AddToElementsList).
+                // Помимо самого списка это проставляет элементу Owner, а он нужен: метод
+                // Element.LogError читает Owner.name БЕЗ проверки на null, и у наших
+                // действий любая жалоба на неверные данные превращалась бы в
+                // NullReferenceException вместо внятной строки в логе.
+                if (element.Owner == null) blueprint.AddToElementsList(element);
+
+                // Внутри действия может лежать ещё один ActionList (Conditional, проверка
+                // навыка с ветками Success/Failure) — спускаемся дальше.
+                NameNested(blueprint, element, element.name);
+            }
         }
 
-        // m_Icon у предметов/фактов — прямая ссылка на UnityEngine.Sprite, а не
-        // строковый BlueprintReference, поэтому проще одолжить уже загруженный Icon
-        // у существующего ванильного блюпринта, чем резолвить guid+fileid вручную.
-        private static Sprite ItemIcon(string blueprintGuid)
-        {
-            return ResourcesLibrary.TryGetBlueprint<BlueprintItem>(blueprintGuid)?.Icon;
-        }
-
-        private static Sprite FactIcon(string blueprintGuid)
-        {
-            return ResourcesLibrary.TryGetBlueprint<BlueprintUnitFact>(blueprintGuid)?.Icon;
-        }
-
-        private static AddContextStatBonus StatBonusFlat(ModifierDescriptor descriptor, StatType stat, int amount)
-        {
-            return new AddContextStatBonus
-            {
-                Descriptor = descriptor,
-                Stat = stat,
-                Multiplier = 1,
-                Value = amount
-            };
-        }
     }
 }

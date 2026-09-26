@@ -48,6 +48,19 @@
             <HintPath>$(ManagedPath)\Owlcat.Runtime.Validation.dll</HintPath>
             <Private>False</Private>
         </Reference>
+        <!-- Нужен для Texture2D.LoadImage: свои иконки мода грузятся из PNG в рантайме
+             (ModIcons.cs). Без этой сборки декодировать PNG нечем. -->
+        <Reference Include="UnityEngine.ImageConversionModule">
+            <HintPath>$(ManagedPath)\UnityEngine.ImageConversionModule.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+    </ItemGroup>
+
+    <ItemGroup>
+      <!-- Иконки мода. Грузятся в рантайме из папки Assets рядом со сборкой
+           (ModIcons.cs), поэтому их достаточно просто положить рядом с DLL —
+           встраивать в ресурсы сборки не нужно. -->
+      <SingingBladeAssets Include="$(ProjectDir)Assets\*.png" />
     </ItemGroup>
 
     <Target Name="DeployMod" AfterTargets="Build">
@@ -55,6 +68,7 @@
         <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(ModDeployPath)" />
         <Copy SourceFiles="$(ProjectDir)Info.json" DestinationFolder="$(ModDeployPath)" />
         <Copy SourceFiles="$(ProjectDir)Localization.json" DestinationFolder="$(ModDeployPath)" />
+        <Copy SourceFiles="@(SingingBladeAssets)" DestinationFolder="$(ModDeployPath)\Assets" />
     </Target>
 
 </Project>

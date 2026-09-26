@@ -49,5 +49,49 @@ namespace SingingBlade
 
             return "Поющий клинок выдан в инвентарь главного персонажа партии.";
         }
+
+        // Удаляет все имеющиеся экземпляры клинка и выдаёт свежий.
+        //
+        // Нужно потому, что факты-зачарования живут НА КОНКРЕТНОМ экземпляре предмета
+        // и создаются в момент его создания. Если в блюпринт зачарования добавлен новый
+        // компонент (как AddUnitFeatureEquipment для «Дотянуться до звёзд») уже ПОСЛЕ того, как
+        // предмет был создан и сохранён, у старого экземпляра этого компонента в фактах
+        // может просто не оказаться — он не активируется, и молча, без единой ошибки
+        // в логе. Пересоздание предмета даёт заведомо свежие факты.
+        public static string RegrantToPlayer()
+        {
+            if (Game.Instance?.Player == null)
+            {
+                return "Нет активной игровой сессии — загрузите сохранение.";
+            }
+
+            var blueprint = ResourcesLibrary.TryGetBlueprint<BlueprintItemWeapon>(Guids.ItemGuid);
+            if (blueprint == null)
+            {
+                return "Блюпринт предмета не найден (мод не успел зарегистрировать блюпринты).";
+            }
+
+            var removed = 0;
+            foreach (var unit in Game.Instance.Player.Party)
+            {
+                // ToList(): удаляем из той же коллекции, по которой идём.
+                foreach (var item in unit.Inventory.Where(i => i.Blueprint == blueprint).ToList())
+                {
+                    unit.Inventory.Remove(item);
+                    removed++;
+                }
+            }
+
+            var mainCharacter = GameHelper.GetPlayerCharacter();
+            if (mainCharacter == null)
+            {
+                return "Не найден главный персонаж партии.";
+            }
+
+            var entity = mainCharacter.Inventory.Add(blueprint);
+            entity.Identify();
+
+            return $"Убрано старых экземпляров: {removed}. Выдан новый Поющий клинок — не забудьте взять его в руки.";
+        }
     }
 }
