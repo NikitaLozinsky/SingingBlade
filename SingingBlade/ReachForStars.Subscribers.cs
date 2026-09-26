@@ -65,6 +65,33 @@ namespace SingingBlade
         }
     }
 
+    // Начало хода в пошаговом бою: всё, что мод обещает "до конца этого раунда", гасится
+    // здесь явно, а не таймером (см. ReachForStars.OnTurnStarted — почему таймера мало).
+    internal class ReachForStarsTurns : ITurnBasedModeHandler
+    {
+        public void HandleTurnStarted(UnitEntityData unit)
+        {
+            if (!Main.Enabled) return;
+            ReachForStars.OnTurnStarted(unit);
+        }
+
+        public void HandleSurpriseRoundStarted()
+        {
+        }
+
+        public void HandleRoundStarted(int round)
+        {
+        }
+
+        public void HandleUnitControlChanged(UnitEntityData unit)
+        {
+        }
+
+        public void HandleUnitNotSurprised(UnitEntityData unit, RuleSkillCheck perceptionCheck)
+        {
+        }
+    }
+
     // Выдаёт бесплатную атаку, пока заклинание лежит "на клинке", и пишет в лог судьбу
     // команды атаки.
     //

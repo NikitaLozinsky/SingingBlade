@@ -73,14 +73,16 @@ namespace SingingBlade
         // В пошаговом бою движок считает конец баффа от начала хода, а не от момента
         // применения (BuffCollection.AddBuff: "timeSpan = TurnBasedCombatController
         // .TurnStartTime" при IsInTurnBasedCombat), и снимает его по тому же TurnStartTime.
-        // Значит 6с = бафф жив весь текущий ход целиком (быстрое действие, каст, удар)
-        // и снимается ровно в начале следующего. В реальном времени 6 секунд — это
-        // тот же раунд.
+        // Расчёт был такой: 6с = бафф жив весь текущий ход и снимается ровно в начале
+        // следующего. НА ПРАКТИКЕ ЭТОГО МАЛО — см. OnTurnStarted: в пошаговом бою режим
+        // теперь гасится явно, а 6 секунд остались сроком для реального времени и
+        // страховкой.
         public const float ModeDurationSeconds = 6f;
 
         private static ReachForStarsDelivery _deliverySubscriber;
         private static ReachForStarsGrant _grantSubscriber;
         private static ReachForStarsCommands _commandSubscriber;
+        private static ReachForStarsTurns _turnSubscriber;
 
         // Вызывается один раз вместе с регистрацией блюпринтов.
         public static void Subscribe()
@@ -101,6 +103,42 @@ namespace SingingBlade
             {
                 _commandSubscriber = new ReachForStarsCommands();
                 EventBus.Subscribe(_commandSubscriber);
+            }
+
+            if (_turnSubscriber == null)
+            {
+                _turnSubscriber = new ReachForStarsTurns();
+                EventBus.Subscribe(_turnSubscriber);
+            }
+        }
+
+        // Начался ход юнита в пошаговом бою — гасим всё, что жило "до конца раунда":
+        // сам режим, растяжку досягаемости и заклинание на клинке.
+        //
+        // Почему не хватает длительности баффа. Конец баффа движок считает от начала хода
+        // (TurnStartTime + 6с) и ждал, что следующий ход того же юнита начнётся ровно
+        // через 6 секунд игрового времени. Это не так: время до следующего хода —
+        // UnitEntityData.GetTimeToNextTurn = инициатива + max(кулдаун основного, кулдаун
+        // движения), и раунд бывает короче. Тогда бафф доживает до следующего хода и висит
+        // его ЦЕЛИКОМ (внутри хода время для баффов заморожено на TurnStartTime). В логе это
+        // видно прямо: способность нажата в новом ходу, а режим ещё включён. Игроку это
+        // стоит лишнего очка резерва — он платит за раунд, который уже оплачен.
+        public static void OnTurnStarted(UnitEntityData unit)
+        {
+            try
+            {
+                if (unit?.Descriptor == null) return;
+
+                RemoveIfPresent(unit, ResourcesLibrary.TryGetBlueprint<BlueprintUnitFact>(Guids.ReachForStarsBuffGuid));
+                RemoveIfPresent(unit, ReachStretchBuff());
+
+                // Заклинание прошлого хода на клинке больше не ждёт — как и у ванильного
+                // Лучника, "карман" живёт один раунд.
+                if (_caster == unit) Clear();
+            }
+            catch (Exception e)
+            {
+                Main.LogError("ReachForStars.OnTurnStarted", e);
             }
         }
 
